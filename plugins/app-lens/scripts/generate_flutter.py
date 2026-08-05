@@ -223,8 +223,17 @@ void main() {
 """, encoding="utf-8")
         (prototype_dir / "README.md").write_text("# Original Flutter reference prototype\n\nGenerated from `project-model.json`. It uses original UI, mock data, and local state only.\n", encoding="utf-8")
         generation = model.setdefault("generation", {})
-        generation["flutter_prototype_status"] = "generated"
-        append_audit(model, "flutter_prototype_generated", {"path": "flutter_prototype", "function_count": len(prototype_payload(model)["functions"])})
+        is_confirmed = model.get("project", {}).get("status") == "confirmed"
+        generation["flutter_prototype_status"] = "generated" if is_confirmed else "draft_generated_pending_model_confirmation"
+        append_audit(
+            model,
+            "flutter_prototype_generated",
+            {
+                "path": "flutter_prototype",
+                "function_count": len(prototype_payload(model)["functions"]),
+                "draft": not is_confirmed,
+            },
+        )
         write_json(output_dir / "project-model.json", model)
     except (OSError, ValueError) as error:
         print(f"Flutter generation failed: {error}", file=sys.stderr)

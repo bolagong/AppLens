@@ -18,18 +18,26 @@ The included `scripts/static_inventory.py` accepts a local `.apk` file and write
 
 ## Use in Codex
 
-Install the plugin from its Marketplace, open a new Codex thread in an empty output workspace, and ask Codex to analyze an APK you are authorized to inspect. The Skill will ask for the input path and use the following staged workflow:
+Install the plugin from its Marketplace, open a new Codex thread in an empty output workspace, and ask Codex to analyze an APK you are authorized to inspect. AppLens records the authorization, exploration plan, fallback choice, and delivery goal once in `evidence/run-brief.json`; it does not repeat those questions at every step.
 
 ```text
-inventory → evidence review → editable product model → Flutter prototype → confirmation → PRD
+one-time run brief → evidence → editable model → optional draft prototype → final confirmation → PRD
 ```
 
-Only run the PRD stage after the product model is explicitly confirmed. Authentication, payment, membership, and destructive/external-action flows are explicitly out of scope.
+For a typical end-to-end first pass, users can send one message:
+
+```text
+I am authorized to inspect <APK path>. Output to <project-local directory>.
+Use a resettable isolated emulator for non-login, non-destructive exploration; if unavailable, continue with static evidence. Deliver an editable model and an original draft Flutter prototype. I will approve the actual model before the final PRD.
+```
+
+Use `static_only` instead of an emulator plan when dynamic validation is not wanted. Only the final PRD requires a second, explicit confirmation because the user must be able to see and approve the actual product decisions. Authentication, payment, membership, and destructive/external-action flows are explicitly out of scope.
 
 ## Quick local workflow
 
 ```text
 scripts/preflight.sh
+scripts/configure_run.py --apk /path/to/app.apk --output ./analysis-output --workspace . --confirm-user-authorized-apk --exploration static_only --delivery draft_prototype
 scripts/static_inventory.py /path/to/app.apk --output ./analysis-output
 scripts/reverse_static_inventory.py /path/to/app.apk --output ./analysis-output
 scripts/bootstrap_project.py --evidence ./analysis-output/evidence/static-inventory.json --output ./analysis-output

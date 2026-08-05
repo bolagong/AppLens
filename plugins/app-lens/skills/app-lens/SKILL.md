@@ -25,6 +25,7 @@ Use the selected output directory and keep this structure as the source of truth
 ```text
 project-model.json
 evidence/
+  run-brief.json          # one-time authorization and delivery plan, when configured
   static-inventory.json
   reverse-static.json
   reverse-decompiled/  # local opaque working data; never used in generated deliverables
@@ -40,14 +41,24 @@ docs/
 
 ## Workflow
 
-### 1. Preflight and authorization
+### 1. One-time preflight and run brief
 
-Ask for or confirm:
+Extract already explicit facts from the user's first request; do not ask again for an authorization or emulator choice the user has already stated. Establish the following once per output directory:
 
-- the path to the user-provided `.apk` file;
-- the project-local output directory;
-- that the user is authorized to inspect it;
-- whether static-only analysis is acceptable when an emulator cannot run the app.
+- path to the user-provided `.apk` file;
+- project-local output directory;
+- explicit authorization to inspect the APK;
+- exploration plan: `static_only` or `dynamic`; for dynamic, whether static fallback is permitted;
+- requested delivery: `evidence`, `model`, or `draft_prototype`.
+
+If any required fact is missing, ask one compact, combined question rather than staging several approval questions. Use this reply format:
+
+```text
+APK: <path>; output: <project-local directory>; authorized: yes;
+exploration: static_only | dynamic; fallback: yes | no; delivery: evidence | model | draft_prototype
+```
+
+Treat `dynamic` as permission to use only a resettable isolated emulator. Never infer it from the presence of `adb` or an emulator. `draft_prototype` authorizes an original, review-ready draft—not a final PRD.
 
 From the plugin root, run the preflight command exactly as follows:
 
@@ -58,6 +69,14 @@ scripts/preflight.sh
 `preflight.sh` is an executable Shell script; do not infer a `.py` extension or invoke `preflight.py`. Report missing optional tools without installing anything unless the user separately asks to install them.
 
 Accept only a user-provided `.apk` file as input. Do not connect to a real device or retrieve installed application packages through ADB.
+
+After the user's one-time confirmation, record it before collecting evidence. Pass `--confirm-isolated-emulator` only for an explicitly selected dynamic plan:
+
+```text
+scripts/configure_run.py --apk <apk-path> --output <output-dir> --workspace <workspace-dir> --confirm-user-authorized-apk --exploration static_only --delivery <evidence|model|draft_prototype>
+```
+
+For an authorized dynamic plan, use `--exploration dynamic --confirm-isolated-emulator`; add `--allow-static-fallback` only when the user selected fallback. `evidence/run-brief.json` is the auditable record of the selected plan. Do not turn its flags into a substitute for a user statement.
 
 ### 2. Static inventory
 
@@ -89,7 +108,9 @@ For every observed page or proposed function, attach:
 
 If the application cannot run because of architecture, emulator detection, special hardware, or another limitation, retain static findings and label dynamic evidence unavailable. Do not bypass the restriction.
 
-Only after the user explicitly confirms a resettable emulator, install the input package with `scripts/install_to_emulator.py`. Then invoke `scripts/safe_explore.py --serial <emulator-serial> --package <package> --output <output-dir> --confirm-isolated-emulator`. The explorer refuses non-emulator targets, captures only non-interception screenshots, and skips high-risk or unnamed controls. Run `scripts/ingest_dynamic_evidence.py --output <output-dir>` afterward.
+Run dynamic commands only when `evidence/run-brief.json` records the dynamic plan. Install the input package with `scripts/install_to_emulator.py`, then invoke `scripts/safe_explore.py --serial <emulator-serial> --package <package> --output <output-dir> --confirm-isolated-emulator`. The explorer refuses non-emulator targets, captures only non-interception screenshots, and skips high-risk or unnamed controls. Run `scripts/ingest_dynamic_evidence.py --output <output-dir>` afterward.
+
+When dynamic exploration is unavailable and the brief permits static fallback, continue automatically with static evidence, mark dynamic evidence unavailable, and deliver the selected static-mode result. When fallback was not permitted, stop before dynamic installation and report the limitation.
 
 ### 4. Product decision model
 
@@ -115,15 +136,15 @@ Start the local three-column editor with `scripts/serve_workbench.py --output <o
 
 ### 5. Original Flutter reference prototype
 
-Generate a draft after the product model is reviewed: `scripts/generate_flutter.py --output <output-dir>`. Create an original visual system based on abstracted properties such as hierarchy, density, spacing, typography scale, color tendency, corners, shadows, navigation, cards, buttons, and list patterns.
+If the run brief requests `draft_prototype`, generate a review-ready draft after evidence is incorporated: `scripts/generate_flutter.py --output <output-dir>`. Otherwise generate it after the product model is reviewed. A model that is not formally confirmed produces a draft and must be labelled as such. Create an original visual system based on abstracted properties such as hierarchy, density, spacing, typography scale, color tendency, corners, shadows, navigation, cards, buttons, and list patterns.
 
 The prototype must use original branding and mock content. Include confirmed navigation and local, demonstrable states such as empty, loading, success, and failure where applicable. Exclude authentication, membership, subscriptions, payment, real backends, competitor APIs, and external side effects.
 
 Run `scripts/verify_flutter.py --output <output-dir> --run` when Flutter is installed. Verify routes, core flows, local state synchronization, and that excluded flows were not generated. If Flutter is unavailable, record that validation was not run rather than claiming success.
 
-### 6. Confirmation and PRD
+### 6. One final confirmation and PRD
 
-Never generate the final PRD until the user explicitly confirms the final product-model version. Record the approval with `scripts/approve_model.py --output <output-dir> --version <version>`, then run `scripts/generate_prd.py --output <output-dir>`. This creates `docs/PRD.md` in Markdown with:
+Never generate the final PRD until the user explicitly confirms the actual final product-model version. This is the only post-evidence confirmation needed when the user selected `draft_prototype` at preflight. Record the approval with `scripts/approve_model.py --output <output-dir> --version <version>`, then run `scripts/generate_prd.py --output <output-dir>`. This creates `docs/PRD.md` in Markdown with:
 
 1. document information and change log;
 2. scope and non-goals;
@@ -142,4 +163,4 @@ At each stage, report:
 1. completed artifacts;
 2. evidence and confidence level;
 3. skipped or blocked paths and why;
-4. the one concrete approval or input needed for the next stage.
+4. the next action only when it blocks a deliverable the user asked for.

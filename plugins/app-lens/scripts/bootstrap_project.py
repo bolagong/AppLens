@@ -20,6 +20,17 @@ def load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def load_run_brief(output_dir: Path) -> dict[str, Any] | None:
+    """Load the optional, user-confirmed run plan without making it mandatory."""
+    brief_path = output_dir / "evidence" / "run-brief.json"
+    if not brief_path.is_file():
+        return None
+    brief = load_json(brief_path)
+    if brief.get("schema_version") != "1.0":
+        raise ValueError("run-brief.json has an unsupported schema version.")
+    return brief
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", required=True, type=Path, help="static-inventory.json path")
@@ -36,6 +47,7 @@ def main() -> int:
 
     try:
         evidence = load_json(evidence_path)
+        run_brief = load_run_brief(output_dir)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"Cannot read evidence: {error}", file=sys.stderr)
         return 2
@@ -44,6 +56,8 @@ def main() -> int:
 
     source = evidence.get("source", {})
     reverse_evidence_path = output_dir / "evidence" / "reverse-static.json"
+    plan = run_brief.get("plan", {}) if isinstance(run_brief, dict) else {}
+    delivery = plan.get("delivery") if isinstance(plan, dict) else None
     model = {
         "schema_version": "1.0",
         "project": {
@@ -59,6 +73,7 @@ def main() -> int:
                 "input_sha256": source.get("input_sha256"),
                 "static_evidence": "evidence/static-inventory.json",
                 "reverse_static_evidence": "evidence/reverse-static.json" if reverse_evidence_path.is_file() else None,
+                "run_brief": "evidence/run-brief.json" if run_brief else None,
             },
             "screenshots": [],
             "navigation_paths": [],
@@ -69,11 +84,17 @@ def main() -> int:
             "reference_notes": [],
             "decisions": {},
         },
+        "engagement": {
+            "delivery": delivery or "model",
+            "exploration": plan.get("exploration", "not_recorded") if isinstance(plan, dict) else "not_recorded",
+            "final_prd_requires_model_confirmation": True,
+        },
         "functions": [],
         "generation": {
             "approved_model_version": None,
             "approved_at": None,
             "approved_model_fingerprint": None,
+            "draft_prototype_requested": delivery == "draft_prototype",
             "flutter_prototype_status": "not_started",
             "prd_status": "blocked_pending_confirmation",
         },
@@ -81,7 +102,11 @@ def main() -> int:
             {
                 "at": utc_now(),
                 "event": "model_bootstrapped",
-                "details": {"evidence": "evidence/static-inventory.json"},
+                "details": {
+                    "evidence": "evidence/static-inventory.json",
+                    "run_brief": "evidence/run-brief.json" if run_brief else None,
+                    "requested_delivery": delivery or "model",
+                },
             }
         ],
     }

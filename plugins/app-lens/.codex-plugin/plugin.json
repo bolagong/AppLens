@@ -1,6 +1,6 @@
 {
   "name": "app-lens",
-  "version": "0.1.0+codex.20260805082306",
+  "version": "0.1.0+codex.20260805085508",
   "description": "Analyze a permitted Android APK into evidence, an editable product model, a Flutter reference prototype, and a Markdown PRD.",
   "author": {
     "name": "AppLens Contributors"
@@ -19,9 +19,9 @@
       "Prototype generation"
     ],
     "defaultPrompt": [
-      "Use AppLens to run restricted reverse-static analysis on this permitted APK and create an editable product model.",
-      "Review the APK evidence and propose an original Flutter reference prototype.",
-      "Generate a Markdown PRD from the confirmed product model."
+      "I am authorized to inspect this APK. Use static analysis and create an editable product model in this workspace.",
+      "I am authorized to inspect this APK. Use only a resettable isolated emulator, fall back to static evidence, and create a draft prototype.",
+      "I confirm this product-model version. Generate the Markdown PRD."
     ]
   }
 }
