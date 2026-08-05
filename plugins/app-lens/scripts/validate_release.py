@@ -12,10 +12,11 @@ from pathlib import Path
 
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 REQUIRED_SCRIPTS = {
-    "preflight.sh", "static_inventory.py", "bootstrap_project.py", "derive_candidates.py", "adb_acquire.py",
+    "preflight.sh", "static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
     "install_to_emulator.py", "safe_explore.py", "ingest_dynamic_evidence.py", "serve_workbench.py",
     "approve_model.py", "generate_flutter.py", "verify_flutter.py", "generate_prd.py", "validate_model.py",
 }
+FORBIDDEN_SCRIPTS = {"adb_acquire.py"}
 
 
 def main() -> int:
@@ -54,6 +55,9 @@ def main() -> int:
     missing_scripts = sorted(name for name in REQUIRED_SCRIPTS if not (root / "scripts" / name).is_file())
     if missing_scripts:
         errors.append(f"missing scripts: {', '.join(missing_scripts)}")
+    forbidden_scripts = sorted(name for name in FORBIDDEN_SCRIPTS if (root / "scripts" / name).exists())
+    if forbidden_scripts:
+        errors.append(f"unsupported device-acquisition scripts present: {', '.join(forbidden_scripts)}")
     for required in (root / "README.md", root / "workbench" / "index.html", root / "RELEASE.md"):
         if not required.is_file():
             errors.append(f"missing release file: {required.relative_to(root)}")

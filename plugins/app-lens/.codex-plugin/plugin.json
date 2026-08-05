@@ -1,6 +1,6 @@
 {
   "name": "app-lens",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260805074214",
   "description": "Analyze a permitted Android APK into evidence, an editable product model, a Flutter reference prototype, and a Markdown PRD.",
   "author": {
     "name": "AppLens Contributors"
@@ -12,7 +12,11 @@
     "longDescription": "A local-first Codex workflow for safely analyzing an Android APK, reviewing evidence, and producing an original Flutter reference prototype and Markdown PRD.",
     "developerName": "AppLens Contributors",
     "category": "Productivity",
-    "capabilities": ["Local analysis", "Evidence modeling", "Prototype generation"],
+    "capabilities": [
+      "Local analysis",
+      "Evidence modeling",
+      "Prototype generation"
+    ],
     "defaultPrompt": [
       "Use AppLens to analyze this permitted APK and create an editable product model.",
       "Review the APK evidence and propose an original Flutter reference prototype.",

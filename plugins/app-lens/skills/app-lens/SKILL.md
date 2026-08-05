@@ -1,11 +1,11 @@
 ---
 name: app-lens
-description: Analyze a user-authorized Android APK/XAPK into evidence, an editable product model, an original Flutter reference prototype, and a Markdown PRD. Use when the user asks to analyze an Android competitor app, turn an APK into a product-function map, create a Flutter reference prototype from APK evidence, or generate a PRD after a reviewed product decision.
+description: Analyze a user-authorized Android APK into evidence, an editable product model, an original Flutter reference prototype, and a Markdown PRD. Use when the user asks to analyze an Android competitor app, turn an APK into a product-function map, create a Flutter reference prototype from APK evidence, or generate a PRD after a reviewed product decision.
 ---
 
 # AppLens
 
-Use this Skill only for an APK/XAPK the user is authorized to inspect. Treat the result as a product reference, never as a request to copy an application.
+Use this Skill only for a user-provided APK the user is authorized to inspect. Treat the result as a product reference, never as a request to copy an application.
 
 ## Safety boundaries
 
@@ -41,21 +41,21 @@ docs/
 
 Ask for or confirm:
 
-- the APK/XAPK path;
+- the path to the user-provided `.apk` file;
 - the project-local output directory;
 - that the user is authorized to inspect it;
 - whether static-only analysis is acceptable when an emulator cannot run the app.
 
 Run the included preflight script from the plugin root. Report missing optional tools without installing anything unless the user separately asks to install them.
 
-When the user chooses an installed App rather than an uploaded package, use `scripts/adb_acquire.py list --serial <serial>` to list package names. Pull a package only after the user explicitly selects it, by repeating the exact name in both `--package` and `--confirm-package`. Never launch or dynamically explore a real phone.
+Accept only a user-provided `.apk` file as input. Do not connect to a real device or retrieve installed application packages through ADB.
 
 ### 2. Static inventory
 
 Run these commands in order:
 
 ```text
-scripts/static_inventory.py <input> --output <output-dir>
+scripts/static_inventory.py <apk-path> --output <output-dir>
 scripts/bootstrap_project.py --evidence <output-dir>/evidence/static-inventory.json --output <output-dir>
 scripts/derive_candidates.py --output <output-dir>
 ```

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Create a conservative local inventory for a user-authorized APK or XAPK."""
+"""Create a conservative local inventory for a user-provided APK."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import shutil
 import subprocess
 import sys
-import tempfile
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -43,27 +41,6 @@ def command_output(command: list[str]) -> dict[str, Any]:
         "stdout": result.stdout[:20000],
         "stderr": result.stderr[:4000],
     }
-
-
-def select_apk(input_path: Path, work_dir: Path) -> tuple[Path, list[str]]:
-    if input_path.suffix.lower() == ".apk":
-        return input_path, []
-
-    with zipfile.ZipFile(input_path) as archive:
-        apk_members = sorted(
-            member for member in archive.namelist() if member.lower().endswith(".apk")
-        )
-        if not apk_members:
-            raise ValueError("The XAPK does not contain an APK file.")
-
-        preferred = next(
-            (member for member in apk_members if Path(member).name.lower() == "base.apk"),
-            apk_members[0],
-        )
-        selected_path = work_dir / Path(preferred).name
-        with archive.open(preferred) as source, selected_path.open("wb") as target:
-            shutil.copyfileobj(source, target)
-        return selected_path, apk_members
 
 
 def inventory_zip(apk_path: Path) -> dict[str, Any]:
@@ -124,7 +101,7 @@ def android_tool_evidence(apk_path: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", type=Path, help="Path to a .apk or .xapk file")
+    parser.add_argument("input", type=Path, help="Path to a user-provided .apk file")
     parser.add_argument("--output", required=True, type=Path, help="Analysis output directory")
     arguments = parser.parse_args()
 
@@ -132,38 +109,35 @@ def main() -> int:
     output_dir = arguments.output.expanduser().resolve()
     if not input_path.is_file():
         parser.error(f"Input file does not exist: {input_path}")
-    if input_path.suffix.lower() not in {".apk", ".xapk"}:
-        parser.error("Input must have a .apk or .xapk extension.")
+    if input_path.suffix.lower() != ".apk":
+        parser.error("Input must have a .apk extension.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     evidence_dir = output_dir / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        with tempfile.TemporaryDirectory(prefix="apk-inventory-") as temporary_directory:
-            apk_path, xapk_members = select_apk(input_path, Path(temporary_directory))
-            report = {
-                "schema_version": "1.0",
-                "source": {
-                    "input_filename": input_path.name,
-                    "input_type": input_path.suffix.lower().removeprefix("."),
-                    "input_sha256": sha256(input_path),
-                    "selected_apk_filename": apk_path.name,
-                    "selected_apk_sha256": sha256(apk_path),
-                    "xapk_apk_members": xapk_members,
-                },
-                "scope": {
-                    "purpose": "local static evidence inventory",
-                    "excluded": [
-                        "API endpoints",
-                        "credentials and tokens",
-                        "backend implementation",
-                        "decompiled source code",
-                    ],
-                },
-                "archive": inventory_zip(apk_path),
-                "android_tool_evidence": android_tool_evidence(apk_path),
-            }
+        report = {
+            "schema_version": "1.0",
+            "source": {
+                "input_filename": input_path.name,
+                "input_type": "apk",
+                "input_sha256": sha256(input_path),
+                "selected_apk_filename": input_path.name,
+                "selected_apk_sha256": sha256(input_path),
+            },
+            "scope": {
+                "purpose": "local static evidence inventory",
+                "excluded": [
+                    "API endpoints",
+                    "credentials and tokens",
+                    "backend implementation",
+                    "decompiled source code",
+                ],
+            },
+            "archive": inventory_zip(input_path),
+            "android_tool_evidence": android_tool_evidence(input_path),
+        }
     except (OSError, ValueError, zipfile.BadZipFile) as error:
         print(f"Inventory failed: {error}", file=sys.stderr)
         return 2

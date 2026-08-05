@@ -37,5 +37,5 @@ The user should start a new Codex thread after installing or upgrading the plugi
 
 1. Update `.codex-plugin/plugin.json` version and user-facing description.
 2. Run the release checks and record their output in the release notes.
-3. Confirm that the Skill still excludes credentials, API discovery, real-device exploration, authentication, commercial flows, external actions, competitor assets, and real backend generation.
+3. Confirm that the Skill accepts only user-provided `.apk` files and still excludes real-device connections, credentials, API discovery, authentication, commercial flows, external actions, competitor assets, and real backend generation.
 4. Test on a resettable emulator only. Do not include a competitor APK, decompiled code, screenshots with personal data, or generated analysis artifacts in the public repository.
