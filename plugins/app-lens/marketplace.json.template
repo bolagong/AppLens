@@ -1,0 +1,20 @@
+{
+  "name": "app-lens",
+  "interface": {
+    "displayName": "AppLens"
+  },
+  "plugins": [
+    {
+      "name": "app-lens",
+      "source": {
+        "source": "local",
+        "path": "./plugins/app-lens"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

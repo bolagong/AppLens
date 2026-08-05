@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AppLens Workbench</title>
+    <style>
+      :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #f4f6fb; color: #172033; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; background: #18233d; color: #fff; }
+      h1 { margin: 0; font-size: 18px; } h2 { margin: 0 0 12px; font-size: 16px; } h3 { margin: 0; font-size: 14px; }
+      button, input, select, textarea { font: inherit; } button { cursor: pointer; border: 0; border-radius: 8px; padding: 9px 12px; background: #255ccf; color: #fff; font-weight: 650; }
+      button.secondary { background: #e7ecf8; color: #172033; } button.danger { background: #bd334a; } button:disabled { opacity: .55; cursor: not-allowed; }
+      .top-actions { display: flex; gap: 8px; flex-wrap: wrap; } .status { font-size: 13px; color: #b9c5e6; }
+      main { display: grid; grid-template-columns: 270px minmax(320px, 1fr) minmax(360px, 1.25fr); gap: 16px; padding: 16px; max-width: 1700px; margin: auto; }
+      section, aside { background: #fff; border: 1px solid #e1e6f2; border-radius: 12px; box-shadow: 0 2px 10px rgba(27, 40, 72, .04); }
+      .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px; border-bottom: 1px solid #e8ecf5; }
+      .function-list { margin: 0; padding: 8px; list-style: none; max-height: calc(100vh - 155px); overflow: auto; }
+      .function-list button { width: 100%; text-align: left; background: transparent; color: #172033; padding: 11px; margin: 2px 0; font-weight: 500; }
+      .function-list button:hover, .function-list button.active { background: #eaf0ff; color: #1748ad; }
+      .tag { display: inline-block; margin-top: 4px; padding: 2px 6px; border-radius: 99px; background: #e9edf6; color: #56617a; font-size: 11px; }
+      .content { padding: 16px; } .empty { padding: 36px 20px; text-align: center; color: #68738c; }
+      label { display: block; margin: 12px 0 5px; color: #3d4962; font-size: 12px; font-weight: 700; } input, select, textarea { width: 100%; border: 1px solid #ccd4e5; border-radius: 7px; padding: 9px; background: #fff; color: #172033; }
+      textarea { min-height: 74px; resize: vertical; line-height: 1.4; } .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .evidence { margin: 0; padding-left: 18px; color: #4c5872; font-size: 13px; } .evidence li { margin: 6px 0; }
+      .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 10px; }
+      .shots a { display: block; color: #255ccf; font-size: 12px; overflow-wrap: anywhere; } .shots img { display: block; width: 100%; border-radius: 7px; border: 1px solid #dfe5f1; margin-bottom: 3px; }
+      .overview { display: grid; gap: 12px; }.metric { background: #f5f7fc; border-radius: 9px; padding: 12px; }.metric strong { display: block; font-size: 21px; }
+      .notice { padding: 10px 14px; font-size: 13px; background: #fff6dc; color: #765000; border-bottom: 1px solid #f1dc9b; display: none; }
+      .notice.error { background: #ffeaed; color: #981c35; border-color: #fac5cf; } .hidden { display: none; }
+      .footer-actions { display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid #e8ecf5; margin-top: 18px; }
+      @media (max-width: 1050px) { main { grid-template-columns: 240px 1fr; } #evidencePanel { grid-column: span 2; } }
+      @media (max-width: 680px) { header { align-items: flex-start; flex-direction: column; } main { display: block; padding: 10px; } main > * { margin-bottom: 10px; } .function-list { max-height: 220px; } .row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div><h1>AppLens Workbench</h1><div id="projectStatus" class="status">Loading project model…</div></div>
+      <div class="top-actions"><button class="secondary" id="refreshButton">Refresh</button><button id="saveButton">Save model</button><button id="confirmButton">Confirm final version</button></div>
+    </header>
+    <div id="notice" class="notice"></div>
+    <main>
+      <aside>
+        <div class="panel-head"><h2>Function tree</h2><button id="addFunction" title="Add function">＋</button></div>
+        <ul id="functionList" class="function-list"></ul>
+      </aside>
+      <section id="editorPanel"><div class="empty">Select a function or create an original one.</div></section>
+      <section id="evidencePanel">
+        <div class="panel-head"><h2>Evidence & visual reference</h2><span class="tag">Read evidence, edit decisions</span></div>
+        <div class="content">
+          <div id="overview" class="overview"></div>
+          <label for="visualNotes">Visual reference notes (one per line)</label>
+          <textarea id="visualNotes" placeholder="e.g. Compact card list&#10;Muted blue accent&#10;16 px card radius"></textarea>
+          <label for="visualDecisions">Visual decisions JSON</label>
+          <textarea id="visualDecisions" placeholder='{"primary_color":"#3454D1","corner_radius":16}'></textarea>
+          <div class="footer-actions"><button class="secondary" id="applyVisual">Apply visual edits</button></div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const state = { model: null, selected: -1 };
+      const requiredFields = ["name", "entry", "flow", "pages", "page_states", "interaction_rules", "competitor_evidence", "confidence", "product_decision", "modification_notes", "acceptance_criteria"];
+      const byId = (id) => document.getElementById(id);
+      const notice = (message, error = false) => { const el = byId("notice"); el.textContent = message; el.className = `notice${error ? " error" : ""}`; el.style.display = message ? "block" : "none"; };
+      const lines = (value) => value.split("\n").map(v => v.trim()).filter(Boolean);
+      const functionTemplate = () => ({ name: "New product function", entry: "", flow: [], pages: [], page_states: [], interaction_rules: [], competitor_evidence: [], confidence: "unconfirmed", product_decision: "add", modification_notes: "Original product decision.", acceptance_criteria: [] });
+      const ensureFunction = (item) => { requiredFields.forEach((field) => { if (!(field in item)) item[field] = Array.isArray(field === "flow" || field === "pages" || field === "page_states" || field === "interaction_rules" || field === "competitor_evidence" || field === "acceptance_criteria") ? [] : ""; }); return item; };
+      async function api(url, options = {}) { const response = await fetch(url, options); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || (payload.errors || []).join("; ") || `HTTP ${response.status}`); return payload; }
+      async function refresh() { try { const { model } = await api("/api/model"); state.model = model; state.selected = model.functions.length ? Math.min(state.selected < 0 ? 0 : state.selected, model.functions.length - 1) : -1; render(); notice(""); } catch (error) { notice(error.message, true); } }
+      function render() { const { model } = state; byId("projectStatus").textContent = `${model.project.name} · ${model.project.version || "unversioned"} · ${model.project.status}`; byId("visualNotes").value = (model.visual_model.reference_notes || []).join("\n"); byId("visualDecisions").value = JSON.stringify(model.visual_model.decisions || {}, null, 2); renderList(); renderEditor(); renderEvidence(); }
+      function renderList() { const list = byId("functionList"); list.innerHTML = ""; state.model.functions.forEach((raw, index) => { const item = ensureFunction(raw); const li = document.createElement("li"); const button = document.createElement("button"); button.className = index === state.selected ? "active" : ""; button.innerHTML = `<strong>${escapeHtml(item.name || "Untitled function")}</strong><br><span class="tag">${escapeHtml(item.product_decision)} · ${escapeHtml(item.confidence)}</span>`; button.onclick = () => { state.selected = index; renderList(); renderEditor(); }; li.appendChild(button); list.appendChild(li); }); }
+      function escapeHtml(value) { const el = document.createElement("div"); el.textContent = value; return el.innerHTML; }
+      function field(label, id, value, type = "text") { return `<label for="${id}">${label}</label>${type === "textarea" ? `<textarea id="${id}">${escapeHtml(value)}</textarea>` : `<input id="${id}" value="${escapeHtml(value)}" />`}`; }
+      function renderEditor() { const panel = byId("editorPanel"); if (state.selected < 0) { panel.innerHTML = '<div class="empty">No functions yet. Add one from the product decision layer.</div>'; return; } const item = ensureFunction(state.model.functions[state.selected]); panel.innerHTML = `<div class="panel-head"><h2>Current function</h2><button class="danger" id="deleteFunction">Remove</button></div><div class="content"><div class="row"><div>${field("Function name", "functionName", item.name)}</div><div><label for="decision">Product decision</label><select id="decision">${["keep","modify","delete","add"].map(v => `<option ${item.product_decision === v ? "selected" : ""}>${v}</option>`).join("")}</select></div></div><div class="row"><div><label for="confidence">Confidence</label><select id="confidence">${["dynamically_verified","static_inference","unconfirmed"].map(v => `<option ${item.confidence === v ? "selected" : ""}>${v}</option>`).join("")}</select></div><div>${field("Entry", "entry", item.entry)}</div></div>${field("Flow (one step per line)", "flow", item.flow.join("\n"), "textarea")}${field("Pages (one per line)", "pages", item.pages.join("\n"), "textarea")}${field("Page states (one per line)", "states", item.page_states.join("\n"), "textarea")}${field("Interaction rules (one per line)", "rules", item.interaction_rules.join("\n"), "textarea")}${field("Modification notes", "notes", item.modification_notes, "textarea")}${field("Acceptance criteria (one per line)", "acceptance", item.acceptance_criteria.join("\n"), "textarea")}<label for="evidence">Competitor evidence JSON</label><textarea id="evidence">${escapeHtml(JSON.stringify(item.competitor_evidence, null, 2))}</textarea><div class="footer-actions"><button id="applyFunction">Apply function edits</button></div></div>`; byId("applyFunction").onclick = applyFunction; byId("deleteFunction").onclick = () => { state.model.functions.splice(state.selected, 1); state.selected = Math.max(0, state.selected - 1); render(); }; }
+      function applyFunction() { try { const item = ensureFunction(state.model.functions[state.selected]); item.name = byId("functionName").value.trim(); item.product_decision = byId("decision").value; item.confidence = byId("confidence").value; item.entry = byId("entry").value.trim(); item.flow = lines(byId("flow").value); item.pages = lines(byId("pages").value); item.page_states = lines(byId("states").value); item.interaction_rules = lines(byId("rules").value); item.modification_notes = byId("notes").value.trim(); item.acceptance_criteria = lines(byId("acceptance").value); item.competitor_evidence = JSON.parse(byId("evidence").value || "[]"); if (!item.name) throw new Error("Function name is required."); renderList(); renderEvidence(); notice("Function edits applied locally. Save model to persist."); } catch (error) { notice(`Cannot apply function: ${error.message}`, true); } }
+      function renderEvidence() { const observation = state.model.observations || {}; const shots = observation.screenshots || []; const paths = observation.navigation_paths || []; const functions = state.model.functions || []; byId("overview").innerHTML = `<div class="metric"><strong>${functions.length}</strong>product functions</div><div class="metric"><strong>${shots.length}</strong>dynamic screenshots</div><div class="metric"><strong>${paths.length}</strong>navigation paths</div><div><h3>Observed evidence</h3><ul class="evidence"><li>Static inventory: ${escapeHtml(observation.source_input?.static_evidence || "not linked")}</li><li>Intercepted or skipped paths: ${(observation.interception_points || []).length}</li></ul><div class="shots">${shots.slice(0, 12).map(shot => `<a target="_blank" rel="noopener" href="/output/${encodeURI(shot.screenshot)}">${shot.screenshot?.endsWith(".png") ? `<img src="/output/${encodeURI(shot.screenshot)}" alt="evidence screenshot">` : ""}${escapeHtml(shot.id || shot.screenshot || "screenshot")}</a>`).join("")}</div></div>`; }
+      async function save() { try { applyVisual(); const { model } = await api("/api/model", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: state.model }) }); state.model = model; render(); notice("Saved locally."); return true; } catch (error) { notice(`Save failed: ${error.message}`, true); return false; } }
+      function applyVisual() { try { state.model.visual_model.reference_notes = lines(byId("visualNotes").value); state.model.visual_model.decisions = JSON.parse(byId("visualDecisions").value || "{}"); notice("Visual edits applied locally. Save model to persist."); } catch (error) { notice(`Invalid visual decisions JSON: ${error.message}`, true); throw error; } }
+      async function confirmFinal() { const version = prompt("Confirm the final product-model version (for example v1.0):", state.model.project.version || "v1.0"); if (!version) return; try { if (!await save()) return; const { model } = await api("/api/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version }) }); state.model = model; render(); notice(`Version ${version} confirmed. You can now generate docs/PRD.md.`); } catch (error) { notice(`Confirmation failed: ${error.message}`, true); } }
+      byId("refreshButton").onclick = refresh; byId("saveButton").onclick = save; byId("confirmButton").onclick = confirmFinal; byId("addFunction").onclick = () => { state.model.functions.push(functionTemplate()); state.selected = state.model.functions.length - 1; render(); notice("New original function added locally. Save model to persist."); }; byId("applyVisual").onclick = applyVisual;
+      refresh();
+    </script>
+  </body>
+</html>
