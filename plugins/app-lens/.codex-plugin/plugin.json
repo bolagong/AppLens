@@ -1,6 +1,6 @@
 {
   "name": "app-lens",
-  "version": "0.1.0+codex.20260805095128",
+  "version": "0.1.0+codex.20260805101555",
   "description": "Analyze a permitted Android APK into evidence, an editable product model, a Flutter reference prototype, and a Markdown PRD.",
   "author": {
     "name": "AppLens Contributors"
