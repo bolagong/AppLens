@@ -12,7 +12,7 @@ from pathlib import Path
 
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 REQUIRED_SCRIPTS = {
-    "preflight.sh", "static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
+    "preflight.sh", "static_inventory.py", "reverse_static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
     "install_to_emulator.py", "safe_explore.py", "ingest_dynamic_evidence.py", "serve_workbench.py",
     "approve_model.py", "generate_flutter.py", "verify_flutter.py", "generate_prd.py", "validate_model.py",
 }
@@ -58,6 +58,13 @@ def main() -> int:
     forbidden_scripts = sorted(name for name in FORBIDDEN_SCRIPTS if (root / "scripts" / name).exists())
     if forbidden_scripts:
         errors.append(f"unsupported device-acquisition scripts present: {', '.join(forbidden_scripts)}")
+    for required in (
+        root / "third_party" / "android-reverse-engineering-skill" / "decompile.sh",
+        root / "third_party" / "android-reverse-engineering-skill" / "LICENSE",
+        root / "third_party" / "android-reverse-engineering-skill" / "NOTICE.md",
+    ):
+        if not required.is_file():
+            errors.append(f"missing reverse-engineering dependency file: {required.relative_to(root)}")
     for required in (root / "README.md", root / "workbench" / "index.html", root / "RELEASE.md"):
         if not required.is_file():
             errors.append(f"missing release file: {required.relative_to(root)}")

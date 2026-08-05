@@ -43,6 +43,7 @@ def main() -> int:
     output_layout(output_dir)
 
     source = evidence.get("source", {})
+    reverse_evidence_path = output_dir / "evidence" / "reverse-static.json"
     model = {
         "schema_version": "1.0",
         "project": {
@@ -57,6 +58,7 @@ def main() -> int:
                 "input_filename": source.get("input_filename"),
                 "input_sha256": source.get("input_sha256"),
                 "static_evidence": "evidence/static-inventory.json",
+                "reverse_static_evidence": "evidence/reverse-static.json" if reverse_evidence_path.is_file() else None,
             },
             "screenshots": [],
             "navigation_paths": [],

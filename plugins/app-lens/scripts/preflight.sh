@@ -19,7 +19,7 @@ check_command aapt 'optional Android package metadata extraction'
 check_command aapt2 'optional Android package metadata extraction'
 check_command adb 'optional isolated-emulator exploration'
 check_command emulator 'optional isolated-emulator exploration'
-check_command jadx 'optional source/resource navigation aid'
+check_command jadx 'optional restricted reverse-static UI structure analysis'
 check_command flutter 'optional generated-prototype verification'
 
 printf '\nNo software was installed and no device was accessed.\n'

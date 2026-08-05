@@ -11,6 +11,7 @@ Use this Skill only for a user-provided APK the user is authorized to inspect. T
 
 - Keep all APKs, extracted files, screenshots, evidence, model files, prototypes, and PRDs in the user's current workspace unless the user explicitly requests another project-local path.
 - Do not extract, display, reproduce, or use API URLs, authentication material, tokens, keys, credentials, private user data, or backend logic.
+- Use the bundled CreditTone reverse-engineering wrapper only through `scripts/reverse_static_inventory.py`. It may locally decompile the supplied APK with `jadx --no-res` to derive UI structure; treat that workspace as opaque working data and never surface its source, API, authentication, network, signing, encryption, or native-code content.
 - Do not reproduce competitor brands, logos, app names, icons, images, copy, or other recognizable proprietary assets. Use placeholder brands, original icons, original illustrations, and mock data.
 - Treat login, registration, membership, subscription, payment, and paywall screens as skipped interception points. Do not include them in the product model, Flutter prototype, or PRD.
 - Do not automatically upload, publish, share externally, send messages, place orders, delete data, pay, use real accounts, or provide personal data.
@@ -25,6 +26,8 @@ Use the selected output directory and keep this structure as the source of truth
 project-model.json
 evidence/
   static-inventory.json
+  reverse-static.json
+  reverse-decompiled/  # local opaque working data; never used in generated deliverables
   screenshots/
   paths/
 flutter_prototype/
@@ -56,11 +59,12 @@ Run these commands in order:
 
 ```text
 scripts/static_inventory.py <apk-path> --output <output-dir>
+scripts/reverse_static_inventory.py <apk-path> --output <output-dir>
 scripts/bootstrap_project.py --evidence <output-dir>/evidence/static-inventory.json --output <output-dir>
 scripts/derive_candidates.py --output <output-dir>
 ```
 
-Use the inventory only as evidence: package metadata, declared permissions, component names, resource inventory, native ABI hints, and Android-tool output where available. Do not infer a user-facing feature solely from an ambiguous technical artifact.
+Use the inventories only as evidence: package metadata, declared permissions, component names, resource inventory, native ABI hints, Android-tool output, and restricted reverse-static UI structure where available. Do not infer a user-facing feature solely from an ambiguous technical artifact. The reverse-static layer must contribute only its generic UI component counts and product signals; never read or include raw decompiled source.
 
 ### 3. Evidence collection
 

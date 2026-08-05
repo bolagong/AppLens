@@ -43,6 +43,16 @@ def evidence_strings(evidence: dict[str, Any]) -> list[str]:
     return [value.lower() for value in strings if isinstance(value, str)]
 
 
+def reverse_signals(evidence: dict[str, Any]) -> list[str]:
+    ui_structure = evidence.get("ui_structure", {})
+    signals = ui_structure.get("product_signals", []) if isinstance(ui_structure, dict) else []
+    return [
+        signal.get("name")
+        for signal in signals
+        if isinstance(signal, dict) and isinstance(signal.get("name"), str)
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path, help="Analysis output directory")
@@ -50,6 +60,7 @@ def main() -> int:
     arguments = parser.parse_args()
     output_dir = arguments.output.expanduser().resolve()
     evidence_path = output_dir / "evidence" / "static-inventory.json"
+    reverse_evidence_path = output_dir / "evidence" / "reverse-static.json"
 
     try:
         model = load_model(output_dir)
@@ -71,6 +82,18 @@ def main() -> int:
         if permission.lower() in permission_output:
             candidates[name] = reason
 
+    reverse_evidence: dict[str, Any] | None = None
+    if reverse_evidence_path.is_file():
+        try:
+            payload = load_json(reverse_evidence_path)
+            if isinstance(payload, dict) and payload.get("status") == "completed":
+                reverse_evidence = payload
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+    if reverse_evidence:
+        for name in reverse_signals(reverse_evidence):
+            candidates.setdefault(name, "Restricted reverse-static UI structure signal")
+
     existing = {item.get("name") for item in model.get("functions", []) if isinstance(item, dict)}
     if arguments.replace:
         model["functions"] = [
@@ -86,11 +109,13 @@ def main() -> int:
             continue
         candidate = new_function(name, "static_inference")
         candidate["competitor_evidence"] = [{"type": "static_inventory", "path": "evidence/static-inventory.json", "note": reason}]
+        if reverse_evidence and name in reverse_signals(reverse_evidence):
+            candidate["competitor_evidence"].append({"type": "reverse_static_inventory", "path": "evidence/reverse-static.json", "note": "Restricted UI structure signal"})
         candidate["generated_candidate"] = True
         model["functions"].append(candidate)
         created.append(name)
 
-    append_audit(model, "static_candidates_derived", {"created": created, "source": "evidence/static-inventory.json"})
+    append_audit(model, "static_candidates_derived", {"created": created, "sources": ["evidence/static-inventory.json", "evidence/reverse-static.json"] if reverse_evidence else ["evidence/static-inventory.json"]})
     write_json(output_dir / "project-model.json", model)
     print(json.dumps({"created": created, "count": len(created)}, ensure_ascii=False))
     return 0
