@@ -49,7 +49,13 @@ Ask for or confirm:
 - that the user is authorized to inspect it;
 - whether static-only analysis is acceptable when an emulator cannot run the app.
 
-Run the included preflight script from the plugin root. Report missing optional tools without installing anything unless the user separately asks to install them.
+From the plugin root, run the preflight command exactly as follows:
+
+```text
+scripts/preflight.sh
+```
+
+`preflight.sh` is an executable Shell script; do not infer a `.py` extension or invoke `preflight.py`. Report missing optional tools without installing anything unless the user separately asks to install them.
 
 Accept only a user-provided `.apk` file as input. Do not connect to a real device or retrieve installed application packages through ADB.
 
