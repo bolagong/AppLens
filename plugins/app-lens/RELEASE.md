@@ -17,8 +17,11 @@ From the repository root, run:
 
 ```text
 plugins/app-lens/scripts/validate_release.py
+python3 -B -m unittest discover -s plugins/app-lens/tests -v
 plugins/app-lens/scripts/preflight.sh
 ```
+
+`preflight.sh` is expected to fail on a release machine without the required local toolchain. Test the provisioner separately in a disposable project workspace after reviewing the upstream tool versions and publisher checksums.
 
 For a representative authorized APK, run the full static-to-PRD workflow and verify the generated Flutter prototype with `verify_flutter.py --run`.
 

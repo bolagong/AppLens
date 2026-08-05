@@ -26,6 +26,7 @@ Use the selected output directory and keep this structure as the source of truth
 project-model.json
 evidence/
   run-brief.json          # one-time authorization and delivery plan, when configured
+  toolchain.json          # tool versions, source URLs, and checksums when provisioned
   static-inventory.json
   reverse-static.json
   reverse-decompiled/  # local opaque working data; never used in generated deliverables
@@ -39,6 +40,8 @@ docs/
 
 `project-model.json` is authoritative. HTML workspaces, the Flutter prototype, and the PRD are derived artifacts.
 
+AppLens is a strict-analysis workflow. `aapt`/`aapt2` and `jadx` are required before any evidence, model, prototype, or PRD is generated. Supplemental Manifest parsing and resource signals may enrich a completed toolchain result but never substitute for either required tool.
+
 ## Workflow
 
 ### 1. One-time preflight and run brief
@@ -48,14 +51,15 @@ Extract already explicit facts from the user's first request; do not ask again f
 - path to the user-provided `.apk` file;
 - project-local output directory;
 - explicit authorization to inspect the APK;
-- exploration plan: `static_only` or `dynamic`; for dynamic, whether static fallback is permitted;
+- permission to download required local tools into that output when they are missing;
+- exploration plan: `static_only` or `dynamic`;
 - requested delivery: `evidence`, `model`, or `draft_prototype`.
 
 If any required fact is missing, ask one compact, combined question rather than staging several approval questions. Use this reply format:
 
 ```text
 APK: <path>; output: <project-local directory>; authorized: yes;
-exploration: static_only | dynamic; fallback: yes | no; delivery: evidence | model | draft_prototype
+tool-downloads: yes | no; exploration: static_only | dynamic; delivery: evidence | model | draft_prototype
 ```
 
 Treat `dynamic` as permission to use only a resettable isolated emulator. Never infer it from the presence of `adb` or an emulator. `draft_prototype` authorizes an original, review-ready draft—not a final PRD.
@@ -66,17 +70,24 @@ From the plugin root, run the preflight command exactly as follows:
 scripts/preflight.sh
 ```
 
-`preflight.sh` is an executable Shell script; do not infer a `.py` extension or invoke `preflight.py`. Report missing optional tools without installing anything unless the user separately asks to install them.
+`preflight.sh` is an executable Shell script; do not infer a `.py` extension or invoke `preflight.py`. It fails when `aapt`/`aapt2` or `jadx` is missing. When the user's analysis request explicitly authorizes tool downloads, immediately prepare the missing tools in the selected project output, then rerun the check:
+
+```text
+scripts/provision_analysis_tools.py --output <output-dir> --approve-download
+scripts/require_analysis_tools.py --output <output-dir>
+```
+
+The provisioner downloads only the latest official AAPT2, JADX, and—if no Java runtime is available—Eclipse Temurin JRE, verifies publisher-provided checksums, and writes its tool receipt to `evidence/toolchain.json`. It never installs system-wide software and it never creates a reduced-evidence artifact. If download authorization was not given, ask for it; do not downgrade.
 
 Accept only a user-provided `.apk` file as input. Do not connect to a real device or retrieve installed application packages through ADB.
 
 After the user's one-time confirmation, record it before collecting evidence. Pass `--confirm-isolated-emulator` only for an explicitly selected dynamic plan:
 
 ```text
-scripts/configure_run.py --apk <apk-path> --output <output-dir> --workspace <workspace-dir> --confirm-user-authorized-apk --exploration static_only --delivery <evidence|model|draft_prototype>
+scripts/configure_run.py --apk <apk-path> --output <output-dir> --workspace <workspace-dir> --confirm-user-authorized-apk --confirm-tool-downloads --exploration static_only --delivery <evidence|model|draft_prototype>
 ```
 
-For an authorized dynamic plan, use `--exploration dynamic --confirm-isolated-emulator`; add `--allow-static-fallback` only when the user selected fallback. `evidence/run-brief.json` is the auditable record of the selected plan. Do not turn its flags into a substitute for a user statement.
+Omit `--confirm-tool-downloads` if the user declined tool downloads; then report missing tools as a blocker rather than downgrade. For an authorized dynamic plan, use `--exploration dynamic --confirm-isolated-emulator`. `evidence/run-brief.json` is the auditable record of the selected plan. Do not turn its flags into a substitute for a user statement.
 
 ### 2. Static inventory
 
@@ -89,7 +100,9 @@ scripts/bootstrap_project.py --evidence <output-dir>/evidence/static-inventory.j
 scripts/derive_candidates.py --output <output-dir>
 ```
 
-Use the inventories only as evidence: package metadata, declared permissions, component names, resource inventory, native ABI hints, Android-tool output, and restricted reverse-static UI structure where available. Do not infer a user-facing feature solely from an ambiguous technical artifact. The reverse-static layer must contribute only its generic UI component counts and product signals; never read or include raw decompiled source.
+Use the inventories only as evidence: package metadata, declared permissions, component counts, resource inventory, native ABI hints, Android-tool output, and restricted reverse-static UI structure. Do not infer a user-facing feature solely from an ambiguous technical artifact. The reverse-static layer must contribute only its generic UI component counts and product signals; never read or include raw decompiled source.
+
+If either static command fails, stop. Do not bootstrap a model, open the workbench, generate a prototype, or claim a completed analysis. A completed toolchain result can still contain `unconfirmed` behaviors, but no tool-missing fallback is allowed.
 
 ### 3. Evidence collection
 
@@ -106,11 +119,11 @@ For every observed page or proposed function, attach:
 - relevant visible controls and static resource/component evidence;
 - confidence: `dynamically_verified`, `static_inference`, or `unconfirmed`.
 
-If the application cannot run because of architecture, emulator detection, special hardware, or another limitation, retain static findings and label dynamic evidence unavailable. Do not bypass the restriction.
+If the application cannot run because of architecture, emulator detection, special hardware, or another limitation, stop the requested dynamic delivery and report the limitation. Do not bypass the restriction or substitute a static-only result for a dynamic request.
 
-Run dynamic commands only when `evidence/run-brief.json` records the dynamic plan. Install the input package with `scripts/install_to_emulator.py`, then invoke `scripts/safe_explore.py --serial <emulator-serial> --package <package> --output <output-dir> --confirm-isolated-emulator`. The explorer refuses non-emulator targets, captures only non-interception screenshots, and skips high-risk or unnamed controls. Run `scripts/ingest_dynamic_evidence.py --output <output-dir>` afterward.
+Run dynamic commands only when `evidence/run-brief.json` records the dynamic plan. Install the input package with `scripts/install_to_emulator.py`, then invoke `scripts/safe_explore.py --serial <emulator-serial> --output <output-dir> --confirm-isolated-emulator`. The explorer obtains the package name from the parsed static inventory; use `--package <package>` only when that safe metadata is unavailable. It refuses non-emulator targets, captures only non-interception screenshots, and skips high-risk or unnamed controls. Run `scripts/ingest_dynamic_evidence.py --output <output-dir>` afterward.
 
-When dynamic exploration is unavailable and the brief permits static fallback, continue automatically with static evidence, mark dynamic evidence unavailable, and deliver the selected static-mode result. When fallback was not permitted, stop before dynamic installation and report the limitation.
+For a static-only plan, omit dynamic exploration because it was deliberately not requested. For a dynamic plan, no static fallback is permitted.
 
 ### 4. Product decision model
 
@@ -133,6 +146,8 @@ acceptance_criteria
 Present the function tree and let the product owner modify it. Product decisions, not raw evidence, control generation. Preserve the original observations read-only inside `observations`.
 
 Start the local three-column editor with `scripts/serve_workbench.py --output <output-dir>`. It is bound to `127.0.0.1`, serves one project only, and writes back through schema validation. A product owner may also edit the JSON directly, then must run `scripts/validate_model.py <output-dir>/project-model.json`.
+
+When the run brief requests `draft_prototype`, continue to generation in the same turn after all requested evidence is incorporated; do not stop merely to ask for an intermediate model decision.
 
 ### 5. Original Flutter reference prototype
 

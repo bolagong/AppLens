@@ -9,22 +9,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from evidence_signals import PRODUCT_SIGNAL_SPECS
 from model_tools import append_audit, load_json, load_model, new_function, write_json
 
 
-SIGNALS = {
-    "camera": ("Camera capture", "Declared camera capability or camera-related resource"),
-    "search": ("Search", "Search-related resource name"),
-    "favorite": ("Save or favorite", "Favorite-related resource name"),
-    "bookmark": ("Save or bookmark", "Bookmark-related resource name"),
-    "filter": ("Filter or sort", "Filter-related resource name"),
-    "location": ("Location-aware experience", "Location-related resource name"),
-    "map": ("Map browsing", "Map-related resource name"),
-    "share": ("External sharing", "Share-related resource name; do not execute dynamically"),
-    "notification": ("Notification preferences", "Notification-related resource name"),
-    "profile": ("Profile or account area", "Profile-related resource name"),
-    "setting": ("Settings", "Settings-related resource name"),
-}
 PERMISSION_SIGNALS = {
     "android.permission.CAMERA": ("Camera capture", "Manifest declares CAMERA permission"),
     "android.permission.ACCESS_FINE_LOCATION": ("Location-aware experience", "Manifest declares fine location permission"),
@@ -33,14 +21,45 @@ PERMISSION_SIGNALS = {
 }
 
 
-def evidence_strings(evidence: dict[str, Any]) -> list[str]:
-    archive = evidence.get("archive", {})
-    strings = list(archive.get("sample_resource_paths", []))
+def android_tool_strings(evidence: dict[str, Any]) -> list[str]:
+    strings: list[str] = []
     results = evidence.get("android_tool_evidence", {}).get("results", {})
     for result in results.values():
         if isinstance(result, dict):
             strings.append(result.get("stdout", ""))
     return [value.lower() for value in strings if isinstance(value, str)]
+
+
+def resource_signal_evidence(evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    archive = evidence.get("archive", {})
+    items = archive.get("resource_signal_summary", []) if isinstance(archive, dict) else []
+    return {
+        item["signal"]: item
+        for item in items
+        if isinstance(item, dict)
+        and isinstance(item.get("signal"), str)
+        and isinstance(item.get("matching_resource_count"), int)
+        and item["matching_resource_count"] > 0
+    }
+
+
+def manifest_permissions(evidence: dict[str, Any]) -> list[str]:
+    metadata = evidence.get("manifest_metadata", {})
+    if not isinstance(metadata, dict) or metadata.get("status") != "parsed":
+        return []
+    values = metadata.get("permissions", [])
+    return [value for value in values if isinstance(value, str)]
+
+
+def evidence_quality(candidate_count: int) -> dict[str, Any]:
+    limitations: list[str] = []
+    if candidate_count < 2:
+        limitations.append("The required static toolchain completed, but it produced fewer than two independent feature hypotheses.")
+    return {
+        "status": "requires_product_review" if limitations else "reviewable",
+        "static_candidate_count": candidate_count,
+        "limitations": limitations,
+    }
 
 
 def reverse_signals(evidence: dict[str, Any]) -> list[str]:
@@ -73,11 +92,18 @@ def main() -> int:
         return 2
 
     candidates: dict[str, str] = {}
-    haystack = "\n".join(evidence_strings(evidence))
-    for keyword, (name, reason) in SIGNALS.items():
-        if keyword in haystack:
-            candidates[name] = reason
-    permission_output = haystack
+    resource_signals = resource_signal_evidence(evidence)
+    for signal, summary in resource_signals.items():
+        spec = PRODUCT_SIGNAL_SPECS.get(signal)
+        if not spec:
+            continue
+        resource_types = ", ".join(summary.get("resource_types", [])) or "resource"
+        candidates[spec["name"]] = (
+            f"{summary['matching_resource_count']} resource name(s) across {resource_types} matched a narrow {signal!r} product term"
+        )
+
+    permission_output = "\n".join(android_tool_strings(evidence))
+    permission_output = "\n".join([permission_output, *manifest_permissions(evidence)]).lower()
     for permission, (name, reason) in PERMISSION_SIGNALS.items():
         if permission.lower() in permission_output:
             candidates[name] = reason
@@ -90,9 +116,11 @@ def main() -> int:
                 reverse_evidence = payload
         except (OSError, ValueError, json.JSONDecodeError):
             pass
-    if reverse_evidence:
-        for name in reverse_signals(reverse_evidence):
-            candidates.setdefault(name, "Restricted reverse-static UI structure signal")
+    if reverse_evidence is None:
+        print("Full AppLens analysis requires completed reverse-static evidence; rerun reverse_static_inventory.py.", file=sys.stderr)
+        return 2
+    for name in reverse_signals(reverse_evidence):
+        candidates.setdefault(name, "Restricted reverse-static UI structure signal")
 
     existing = {item.get("name") for item in model.get("functions", []) if isinstance(item, dict)}
     if arguments.replace:
@@ -115,7 +143,18 @@ def main() -> int:
         model["functions"].append(candidate)
         created.append(name)
 
-    append_audit(model, "static_candidates_derived", {"created": created, "sources": ["evidence/static-inventory.json", "evidence/reverse-static.json"] if reverse_evidence else ["evidence/static-inventory.json"]})
+    summary = evidence_quality(len(candidates))
+    observations = model.setdefault("observations", {})
+    observations["static_evidence_quality"] = summary
+    append_audit(
+        model,
+        "static_candidates_derived",
+        {
+            "created": created,
+            "sources": ["evidence/static-inventory.json", "evidence/reverse-static.json"] if reverse_evidence else ["evidence/static-inventory.json"],
+            "quality": summary,
+        },
+    )
     write_json(output_dir / "project-model.json", model)
     print(json.dumps({"created": created, "count": len(created)}, ensure_ascii=False))
     return 0

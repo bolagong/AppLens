@@ -12,7 +12,7 @@ from pathlib import Path
 
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 REQUIRED_SCRIPTS = {
-    "preflight.sh", "configure_run.py", "static_inventory.py", "reverse_static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
+    "preflight.sh", "analysis_toolchain.py", "require_analysis_tools.py", "provision_analysis_tools.py", "configure_run.py", "evidence_signals.py", "static_inventory.py", "reverse_static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
     "install_to_emulator.py", "safe_explore.py", "ingest_dynamic_evidence.py", "serve_workbench.py",
     "approve_model.py", "generate_flutter.py", "verify_flutter.py", "generate_prd.py", "validate_model.py",
 }
@@ -68,6 +68,9 @@ def main() -> int:
     for required in (root / "README.md", root / "workbench" / "index.html", root / "RELEASE.md"):
         if not required.is_file():
             errors.append(f"missing release file: {required.relative_to(root)}")
+    for test_name in ("test_static_fallback.py", "test_analysis_toolchain.py"):
+        if not (root / "tests" / test_name).is_file():
+            errors.append(f"missing regression test: {test_name}")
     repository_root = root.parents[1]
     marketplace_path = repository_root / ".agents" / "plugins" / "marketplace.json"
     try:

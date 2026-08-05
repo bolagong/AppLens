@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from model_tools import utc_now, write_json
+from model_tools import load_json, utc_now, write_json
 
 
 BLOCKED_PATTERN = re.compile(
@@ -234,10 +234,34 @@ def launch_package(serial: str, package: str) -> None:
     command_ok(result, "Application launch")
 
 
+def package_from_static_evidence(evidence: Any) -> str | None:
+    """Get only the parsed package identifier needed to launch the supplied APK."""
+    if not isinstance(evidence, dict):
+        return None
+    metadata = evidence.get("manifest_metadata")
+    if not isinstance(metadata, dict) or metadata.get("status") != "parsed":
+        return None
+    package_name = metadata.get("package_name")
+    return package_name if isinstance(package_name, str) and package_name.strip() else None
+
+
+def package_from_inventory(output_dir: Path) -> str:
+    try:
+        evidence = load_json(output_dir / "evidence" / "static-inventory.json")
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Cannot read static inventory to determine the package name: {error}") from error
+    package = package_from_static_evidence(evidence)
+    if not package:
+        raise RuntimeError(
+            "The static inventory did not provide a parsed package name. Supply --package explicitly or install a local Android metadata tool."
+        )
+    return package
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", required=True, help="ADB serial for a resettable emulator")
-    parser.add_argument("--package", required=True, help="Already installed package name")
+    parser.add_argument("--package", help="Already installed package name; defaults to the parsed static-inventory package")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--confirm-isolated-emulator", action="store_true", help="Required acknowledgement before launch and exploration")
     parser.add_argument("--max-screens", type=int, default=20)
@@ -252,14 +276,15 @@ def main() -> int:
     output_dir = arguments.output.expanduser().resolve()
     try:
         check_emulator(arguments.serial)
-        explorer = Explorer(arguments.serial, arguments.package, output_dir, arguments.delay, arguments.max_screens, arguments.max_depth)
-        launch_package(arguments.serial, arguments.package)
+        package = arguments.package or package_from_inventory(output_dir)
+        explorer = Explorer(arguments.serial, package, output_dir, arguments.delay, arguments.max_screens, arguments.max_depth)
+        launch_package(arguments.serial, package)
         time.sleep(arguments.delay)
         explorer.explore(explorer.snapshot(), ["launch"], 0)
         session = {
             "schema_version": "1.0",
             "created_at": utc_now(),
-            "package": arguments.package,
+            "package": package,
             "serial": arguments.serial,
             "safety": {
                 "isolated_emulator_confirmed": True,

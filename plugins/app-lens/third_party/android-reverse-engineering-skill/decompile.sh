@@ -151,8 +151,13 @@ run_jadx() {
   local out_dir="$1"
   local jadx_status=0
   local count=0
+  local jadx_command="${APPLENS_JADX:-jadx}"
 
-  if ! command -v jadx &>/dev/null; then
+  if [[ "$jadx_command" == */* ]] && [[ ! -x "$jadx_command" ]]; then
+    echo "Error: APPLENS_JADX does not point to an executable JADX binary." >&2
+    return 1
+  fi
+  if [[ "$jadx_command" != */* ]] && ! command -v "$jadx_command" &>/dev/null; then
     echo "Error: jadx is not installed or not in PATH." >&2
     return 1
   fi
@@ -164,8 +169,8 @@ run_jadx() {
   args+=("--show-bad-code")
   args+=("$INPUT_FILE_ABS")
 
-  echo "Running: jadx ${args[*]}"
-  if jadx "${args[@]}"; then
+  echo "Running: $jadx_command ${args[*]}"
+  if "$jadx_command" "${args[@]}"; then
     jadx_status=0
   else
     jadx_status=$?

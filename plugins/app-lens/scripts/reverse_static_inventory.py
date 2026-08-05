@@ -6,12 +6,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import shutil
+import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from analysis_toolchain import ToolchainError, java_environment, require_jadx
 from model_tools import write_json
 
 
@@ -151,36 +152,35 @@ def main() -> int:
     evidence_path = output_dir / "evidence" / "reverse-static.json"
     decompiled_dir = output_dir / "evidence" / "reverse-decompiled" / input_sha256
     if not UPSTREAM_WRAPPER.is_file():
-        payload = evidence_payload("unavailable", reason="The vendored reverse-engineering wrapper is missing.")
-        write_json(evidence_path, payload)
-        print(evidence_path)
-        return 0
-    if not shutil.which("jadx"):
-        payload = evidence_payload("unavailable", reason="jadx is not installed; standard static inventory remains available.")
-        write_json(evidence_path, payload)
-        print(evidence_path)
-        return 0
+        print("Reverse-static analysis failed: the vendored reverse-engineering wrapper is missing.", file=sys.stderr)
+        return 2
+    try:
+        jadx = require_jadx(output_dir)
+    except ToolchainError as error:
+        print(f"Reverse-static analysis failed: {error}", file=sys.stderr)
+        return 2
 
     try:
+        tool_environment = os.environ.copy()
+        tool_environment["APPLENS_JADX"] = jadx
+        tool_environment.update(java_environment(output_dir))
         result = subprocess.run(
             [str(UPSTREAM_WRAPPER), "--engine", "jadx", "--no-res", "--output", str(decompiled_dir), str(apk_path)],
             check=False,
             capture_output=True,
             text=True,
             timeout=900,
+            env=tool_environment,
         )
         paths = source_paths(decompiled_dir)
-    except (OSError, subprocess.TimeoutExpired):
-        payload = evidence_payload("failed", reason="The restricted local decompilation did not complete.")
-        write_json(evidence_path, payload)
-        print(evidence_path)
-        return 0
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Reverse-static analysis failed: the required JADX run did not complete: {error}", file=sys.stderr)
+        return 2
 
-    if result.returncode not in {0, 2} or not paths:
-        payload = evidence_payload("failed", reason="jadx produced no usable UI structure evidence.")
-        write_json(evidence_path, payload)
-        print(evidence_path)
-        return 0
+    if result.returncode != 0 or not paths:
+        message = result.stderr.strip() or "jadx produced no usable UI structure evidence."
+        print(f"Reverse-static analysis failed: {message[:1000]}", file=sys.stderr)
+        return 2
 
     payload = evidence_payload(
         "completed",

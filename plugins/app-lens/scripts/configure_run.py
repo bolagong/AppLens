@@ -24,9 +24,9 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path, help="Project-local analysis output directory")
     parser.add_argument("--workspace", type=Path, default=Path.cwd(), help="Workspace that must contain --output (defaults to the current directory)")
     parser.add_argument("--confirm-user-authorized-apk", action="store_true", help="Record the user's explicit authorization to inspect this APK")
+    parser.add_argument("--confirm-tool-downloads", action="store_true", help="Record explicit permission to download the required local analysis tools into the selected output")
     parser.add_argument("--exploration", choices=("static_only", "dynamic"), default="static_only")
     parser.add_argument("--confirm-isolated-emulator", action="store_true", help="Required only for resettable-emulator exploration")
-    parser.add_argument("--allow-static-fallback", action="store_true", help="Continue with static evidence if dynamic exploration cannot run")
     parser.add_argument("--delivery", choices=("evidence", "model", "draft_prototype"), default="model")
     arguments = parser.parse_args()
 
@@ -45,8 +45,6 @@ def main() -> int:
         parser.error("--confirm-isolated-emulator is required for dynamic exploration.")
     if arguments.exploration == "static_only" and arguments.confirm_isolated_emulator:
         parser.error("--confirm-isolated-emulator may be used only with --exploration dynamic.")
-    if arguments.exploration == "static_only" and arguments.allow_static_fallback:
-        parser.error("--allow-static-fallback applies only to dynamic exploration.")
 
     brief = {
         "schema_version": "1.0",
@@ -54,11 +52,12 @@ def main() -> int:
         "input": {"filename": apk_path.name, "type": "apk"},
         "authorization": {
             "user_authorized_apk_inspection": True,
+            "tool_downloads_authorized": bool(arguments.confirm_tool_downloads),
             "isolated_emulator_confirmed": arguments.exploration == "dynamic",
         },
         "plan": {
             "exploration": arguments.exploration,
-            "allow_static_fallback": bool(arguments.allow_static_fallback),
+            "analysis_toolchain": "required",
             "delivery": arguments.delivery,
             "final_prd_requires_model_confirmation": True,
         },
