@@ -7,7 +7,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from model_tools import utc_now, write_json
+from evidence_summary import write_evidence_summary
+from model_tools import output_layout, utc_now, write_json
 
 
 def contained_by(path: Path, parent: Path) -> bool:
@@ -27,7 +28,7 @@ def main() -> int:
     parser.add_argument("--confirm-tool-downloads", action="store_true", help="Record explicit permission to download the required local analysis tools into the selected output")
     parser.add_argument("--exploration", choices=("static_only", "dynamic"), default="static_only")
     parser.add_argument("--confirm-isolated-emulator", action="store_true", help="Required only for resettable-emulator exploration")
-    parser.add_argument("--delivery", choices=("evidence", "model", "draft_prototype"), default="model")
+    parser.add_argument("--delivery", choices=("evidence", "model", "draft_prototype"), default="evidence")
     arguments = parser.parse_args()
 
     apk_path = arguments.apk.expanduser().resolve()
@@ -49,7 +50,7 @@ def main() -> int:
     brief = {
         "schema_version": "1.0",
         "created_at": utc_now(),
-        "input": {"filename": apk_path.name, "type": "apk"},
+        "input": {"type": "apk"},
         "authorization": {
             "user_authorized_apk_inspection": True,
             "tool_downloads_authorized": bool(arguments.confirm_tool_downloads),
@@ -68,7 +69,9 @@ def main() -> int:
     }
     brief_path = output_dir / "evidence" / "run-brief.json"
     try:
+        output_layout(output_dir)
         write_json(brief_path, brief)
+        write_evidence_summary(output_dir)
     except OSError as error:
         print(f"Could not write run brief: {error}", file=sys.stderr)
         return 2

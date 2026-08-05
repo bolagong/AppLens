@@ -22,7 +22,8 @@ from pathlib import Path
 from typing import Any
 
 from analysis_toolchain import ToolchainError, require_full_toolchain, resolve_required_tools
-from model_tools import utc_now, write_json
+from evidence_summary import write_evidence_summary
+from model_tools import output_layout, toolchain_root, utc_now, write_json
 
 
 JADX_RELEASE_API = "https://api.github.com/repos/skylot/jadx/releases/latest"
@@ -131,11 +132,28 @@ def executable(root: Path, name: str) -> Path:
     return path
 
 
+def select_aapt2_version(metadata: element_tree.Element) -> str:
+    versions = [
+        value.text.strip()
+        for value in metadata.findall("./versioning/versions/version")
+        if value.text and re.fullmatch(r"[0-9A-Za-z.+-]+", value.text.strip())
+    ]
+    stable_versions = [
+        version
+        for version in versions
+        if not re.search(r"(?:alpha|beta|canary|preview|rc)", version, flags=re.IGNORECASE)
+    ]
+    if stable_versions:
+        return stable_versions[-1]
+    fallback = metadata.findtext("./versioning/release") or metadata.findtext("./versioning/latest")
+    if fallback and re.fullmatch(r"[0-9A-Za-z.+-]+", fallback):
+        return fallback
+    raise RuntimeError("Could not read a safe AAPT2 release version from Google's Maven metadata.")
+
+
 def latest_aapt2(tool_root: Path, maven_os: str) -> tuple[Path, dict[str, Any]]:
     metadata = element_tree.fromstring(fetch_bytes(AAPT2_METADATA_URL))
-    version = metadata.findtext("./versioning/release") or metadata.findtext("./versioning/latest")
-    if not version or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
-        raise RuntimeError("Could not read a safe AAPT2 release version from Google's Maven metadata.")
+    version = select_aapt2_version(metadata)
     filename = f"aapt2-{version}-{maven_os}.jar"
     url = f"https://dl.google.com/android/maven2/com/android/tools/build/aapt2/{version}/{filename}"
     expected_sha1 = fetch_bytes(url + ".sha1").decode("utf-8").strip().split()[0]
@@ -222,15 +240,18 @@ def main() -> int:
     if not arguments.approve_download:
         parser.error("--approve-download is required.")
     output_dir = arguments.output.expanduser().resolve()
-    tool_root = output_dir / ".applens-toolchain"
+    tool_root = toolchain_root(output_dir)
     try:
+        output_layout(output_dir)
         maven_os, adoptium_os, architecture = host_platform()
         tools = resolve_required_tools(output_dir=output_dir)
         downloads: dict[str, Any] = {}
         if not tools["aapt"]:
-            tools["aapt"], downloads["aapt2"] = latest_aapt2(tool_root, maven_os)
+            aapt, downloads["aapt2"] = latest_aapt2(tool_root, maven_os)
+            tools["aapt"] = str(aapt)
         if not tools["jadx"]:
-            tools["jadx"], downloads["jadx"] = latest_jadx(tool_root)
+            jadx, downloads["jadx"] = latest_jadx(tool_root)
+            tools["jadx"] = str(jadx)
         java_home = system_java_home()
         if java_home is None and not shutil.which("java"):
             java_home, downloads["jre"] = latest_jre(tool_root, adoptium_os, architecture)
@@ -245,6 +266,7 @@ def main() -> int:
         }
         write_json(output_dir / "evidence" / "toolchain.json", receipt)
         require_full_toolchain(output_dir)
+        write_evidence_summary(output_dir)
     except (OSError, ToolchainError, RuntimeError, ValueError, urllib.error.URLError, zipfile.BadZipFile, tarfile.TarError, element_tree.ParseError) as error:
         print(f"Tool provisioning failed: {error}", file=sys.stderr)
         return 2

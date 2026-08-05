@@ -21,13 +21,15 @@ PERMISSION_SIGNALS = {
 }
 
 
-def android_tool_strings(evidence: dict[str, Any]) -> list[str]:
-    strings: list[str] = []
-    results = evidence.get("android_tool_evidence", {}).get("results", {})
-    for result in results.values():
-        if isinstance(result, dict):
-            strings.append(result.get("stdout", ""))
-    return [value.lower() for value in strings if isinstance(value, str)]
+def android_permission_signals(evidence: dict[str, Any]) -> list[str]:
+    android = evidence.get("android_tool_evidence", {})
+    if not isinstance(android, dict):
+        return []
+    summary = android.get("permission_summary", {})
+    if not isinstance(summary, dict):
+        return []
+    values = summary.get("generic_signals", [])
+    return [value for value in values if isinstance(value, str)]
 
 
 def resource_signal_evidence(evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -102,10 +104,12 @@ def main() -> int:
             f"{summary['matching_resource_count']} resource name(s) across {resource_types} matched a narrow {signal!r} product term"
         )
 
-    permission_output = "\n".join(android_tool_strings(evidence))
-    permission_output = "\n".join([permission_output, *manifest_permissions(evidence)]).lower()
+    for name in android_permission_signals(evidence):
+        candidates[name] = "Android metadata reported a generic permission capability signal"
+
+    manifest_permission_names = {permission.lower() for permission in manifest_permissions(evidence)}
     for permission, (name, reason) in PERMISSION_SIGNALS.items():
-        if permission.lower() in permission_output:
+        if permission.lower() in manifest_permission_names:
             candidates[name] = reason
 
     reverse_evidence: dict[str, Any] | None = None

@@ -52,6 +52,36 @@ def write_json(path: Path, payload: Any) -> None:
         raise
 
 
+def write_text(path: Path, content: str) -> None:
+    """Atomically write a text artifact without leaving a partial delivery file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as target:
+            target.write(content)
+        Path(temporary_name).replace(path)
+    except BaseException:
+        Path(temporary_name).unlink(missing_ok=True)
+        raise
+
+
+def internal_root(output_dir: Path) -> Path:
+    """Return the isolated, non-delivery working area for one analysis run."""
+    return output_dir / ".applens"
+
+
+def toolchain_root(output_dir: Path) -> Path:
+    return internal_root(output_dir) / "toolchain"
+
+
+def working_root(output_dir: Path) -> Path:
+    return internal_root(output_dir) / "work"
+
+
+def jadx_home(output_dir: Path) -> Path:
+    return internal_root(output_dir) / "jadx-home"
+
+
 def output_layout(output_dir: Path) -> None:
     for directory in (
         output_dir / "evidence" / "screenshots",
@@ -59,6 +89,9 @@ def output_layout(output_dir: Path) -> None:
         output_dir / "evidence" / "dynamic",
         output_dir / "flutter_prototype",
         output_dir / "docs",
+        toolchain_root(output_dir),
+        working_root(output_dir),
+        jadx_home(output_dir),
     ):
         directory.mkdir(parents=True, exist_ok=True)
 

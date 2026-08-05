@@ -14,6 +14,7 @@ Arguments:
 Options:
   -o, --output DIR  Output directory (default: <filename>-decompiled)
   --no-res          Skip resource decoding (faster, code-only)
+  --threads COUNT   JADX processing threads (default: JADX default)
   --engine ENGINE   Decompiler engine: jadx only (default: jadx)
   -h, --help        Show this help message
 
@@ -28,6 +29,7 @@ EOF
 OUTPUT_DIR=""
 DEOBF=false
 NO_RES=false
+THREADS=""
 ENGINE="jadx"
 INPUT_FILE=""
 
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     -o|--output)   OUTPUT_DIR="$2"; shift 2 ;;
     --deobf)       echo "Error: --deobf is not supported by the restricted AppLens adapter." >&2; exit 1 ;;
     --no-res)      NO_RES=true; shift ;;
+    --threads)     THREADS="$2"; shift 2 ;;
     --engine)      ENGINE="$2"; shift 2 ;;
     -h|--help)     usage ;;
     -*)            echo "Error: Unknown option $1" >&2; usage ;;
@@ -166,6 +169,13 @@ run_jadx() {
   args+=("-d" "$out_dir")
   [[ "$DEOBF" == true ]] && args+=("--deobf")
   [[ "$NO_RES" == true ]] && args+=("--no-res")
+  if [[ -n "$THREADS" ]]; then
+    if [[ ! "$THREADS" =~ ^[1-9][0-9]*$ ]]; then
+      echo "Error: --threads must be a positive integer." >&2
+      return 1
+    fi
+    args+=("--threads-count" "$THREADS")
+  fi
   args+=("--show-bad-code")
   args+=("$INPUT_FILE_ABS")
 

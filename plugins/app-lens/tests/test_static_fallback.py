@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import struct
 import sys
+import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
@@ -13,7 +16,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from evidence_signals import resource_signal_summary  # noqa: E402
 from safe_explore import package_from_static_evidence  # noqa: E402
-from static_inventory import NO_INDEX, TYPE_STRING, parse_binary_manifest  # noqa: E402
+from static_inventory import NO_INDEX, TYPE_STRING, android_tool_evidence, inventory_zip, parse_binary_manifest  # noqa: E402
 
 
 def _utf8_length(value: int) -> bytes:
@@ -101,6 +104,30 @@ class StaticFallbackTests(unittest.TestCase):
                 {"signal": "search", "name": "Search", "matching_resource_count": 1, "resource_types": ["layout"]},
             ],
         )
+
+    def test_static_inventory_keeps_only_aggregate_resource_and_aapt_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            apk = Path(directory) / "sample.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("assets/proprietary_brand_asset.png", b"fixture")
+                archive.writestr("res/layout/search_results.xml", b"fixture")
+
+            archive_evidence = inventory_zip(apk)
+
+        self.assertNotIn("sample_resource_paths", archive_evidence)
+        self.assertEqual(archive_evidence["resource_signal_summary"][0]["signal"], "search")
+        with patch(
+            "static_inventory.command_output",
+            side_effect=[
+                ({"available": True, "exit_code": 0}, "package: proprietary.example"),
+                ({"available": True, "exit_code": 0}, "uses-permission: name='android.permission.CAMERA'"),
+            ],
+        ):
+            tool_evidence = android_tool_evidence(Path("sample.apk"), "/tools/aapt2")
+        serialized = repr(tool_evidence)
+        self.assertNotIn("proprietary.example", serialized)
+        self.assertNotIn("stdout", tool_evidence["results"]["badging"])
+        self.assertEqual(tool_evidence["permission_summary"], {"declared_permission_count": 1, "generic_signals": ["Camera capture"]})
 
     def test_dynamic_explorer_uses_the_package_from_safe_static_metadata(self) -> None:
         self.assertEqual(

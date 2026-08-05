@@ -17,6 +17,16 @@ from typing import Any
 
 from analysis_toolchain import ToolchainError, require_aapt
 from evidence_signals import resource_signal_summary
+from evidence_summary import write_evidence_summary
+from model_tools import write_json
+
+
+PERMISSION_SIGNAL_TERMS = {
+    "android.permission.CAMERA": "Camera capture",
+    "android.permission.ACCESS_FINE_LOCATION": "Location-aware experience",
+    "android.permission.ACCESS_COARSE_LOCATION": "Location-aware experience",
+    "android.permission.POST_NOTIFICATIONS": "Notification preferences",
+}
 
 
 def sha256(path: Path) -> str:
@@ -27,7 +37,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def command_output(command: list[str]) -> dict[str, Any]:
+def command_output(command: list[str]) -> tuple[dict[str, Any], str]:
     try:
         result = subprocess.run(
             command,
@@ -36,16 +46,10 @@ def command_output(command: list[str]) -> dict[str, Any]:
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        return {"command": command, "available": False, "error": str(error)}
+    except (OSError, subprocess.TimeoutExpired):
+        return {"available": False, "exit_code": None}, ""
 
-    return {
-        "command": command,
-        "available": True,
-        "exit_code": result.returncode,
-        "stdout": result.stdout[:20000],
-        "stderr": result.stderr[:4000],
-    }
+    return {"available": True, "exit_code": result.returncode}, result.stdout
 
 
 def inventory_zip(apk_path: Path) -> dict[str, Any]:
@@ -71,9 +75,6 @@ def inventory_zip(apk_path: Path) -> dict[str, Any]:
         "dex_files": dex_files,
         "native_abis": architectures,
         "native_library_count": len(native_libraries),
-        "sample_resource_paths": sorted(
-            name for name in file_names if name.startswith(("res/", "assets/"))
-        )[:200],
         # Candidates must not be based on the arbitrary first 200 ZIP entries.
         # Store aggregate counts only, so the report remains safe to share locally.
         "resource_signal_summary": resource_signal_summary(file_names),
@@ -267,16 +268,31 @@ def android_tool_evidence(apk_path: Path, aapt: str) -> dict[str, Any]:
 
     evidence = {
         "tool_available": True,
-        "tool": aapt,
-        "results": {name: command_output(command) for name, command in commands.items()},
+        "tool": tool_name,
     }
+    results: dict[str, dict[str, Any]] = {}
+    raw_outputs: dict[str, str] = {}
+    for name, command in commands.items():
+        result, output = command_output(command)
+        results[name] = result
+        raw_outputs[name] = output
+    evidence["results"] = results
     failures = [
         name
-        for name, result in evidence["results"].items()
+        for name, result in results.items()
         if not isinstance(result, dict) or result.get("exit_code") != 0
     ]
     if failures:
         raise RuntimeError(f"Required Android metadata extraction failed: {', '.join(failures)}")
+    permission_names = sorted(
+        set(re.findall(r"android\.permission\.[A-Z0-9_]+", raw_outputs.get("permissions", "")))
+    )
+    evidence["permission_summary"] = {
+        "declared_permission_count": len(permission_names),
+        "generic_signals": sorted(
+            {signal for permission, signal in PERMISSION_SIGNAL_TERMS.items() if permission in permission_names}
+        ),
+    }
     return evidence
 
 
@@ -300,10 +316,8 @@ def main() -> int:
         report = {
             "schema_version": "1.0",
             "source": {
-                "input_filename": input_path.name,
                 "input_type": "apk",
                 "input_sha256": sha256(input_path),
-                "selected_apk_filename": input_path.name,
                 "selected_apk_sha256": sha256(input_path),
             },
             "scope": {
@@ -327,7 +341,8 @@ def main() -> int:
     evidence_dir = output_dir / "evidence"
     evidence_dir.mkdir(parents=True, exist_ok=True)
     report_path = evidence_dir / "static-inventory.json"
-    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json(report_path, report)
+    write_evidence_summary(output_dir)
     print(report_path)
     return 0
 

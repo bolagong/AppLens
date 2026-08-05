@@ -11,6 +11,7 @@ Use this Skill only for a user-provided APK the user is authorized to inspect. T
 
 - Keep all APKs, extracted files, screenshots, evidence, model files, prototypes, and PRDs in the user's current workspace unless the user explicitly requests another project-local path.
 - Do not extract, display, reproduce, or use API URLs, authentication material, tokens, keys, credentials, private user data, or backend logic.
+- Deliver only aggregate resource statistics, standard permission capability signals, and generic UI signals. Do not retain raw resource paths or raw Android-tool output in delivery evidence.
 - Use the bundled CreditTone reverse-engineering wrapper only through `scripts/reverse_static_inventory.py`. It may locally decompile the supplied APK with `jadx --no-res` to derive UI structure; treat that workspace as opaque working data and never surface its source, API, authentication, network, signing, encryption, or native-code content.
 - Do not reproduce competitor brands, logos, app names, icons, images, copy, or other recognizable proprietary assets. Use placeholder brands, original icons, original illustrations, and mock data.
 - Treat login, registration, membership, subscription, payment, and paywall screens as skipped interception points. Do not include them in the product model, Flutter prototype, or PRD.
@@ -29,16 +30,24 @@ evidence/
   toolchain.json          # tool versions, source URLs, and checksums when provisioned
   static-inventory.json
   reverse-static.json
-  reverse-decompiled/  # local opaque working data; never used in generated deliverables
+  reverse-progress.json  # safe progress for a running or completed reverse-static pass
   screenshots/
   paths/
 flutter_prototype/
 docs/
+  EVIDENCE_SUMMARY.md    # always-updated, human-readable evidence delivery
   PRD.md
   CHANGELOG.md
+.applens/
+  toolchain/             # local tool cache; not a delivery artifact
+  jadx-home/             # local JADX configuration; not a delivery artifact
+  work/
+    reverse-decompiled/  # opaque working data; never used in generated deliverables
 ```
 
 `project-model.json` is authoritative. HTML workspaces, the Flutter prototype, and the PRD are derived artifacts.
+
+`docs/EVIDENCE_SUMMARY.md` is the human-readable entry point for every evidence delivery. It is derived only from safe aggregate evidence and states completed stages, confidence, blocked stages, and the location of non-delivery working data; JSON remains the verifiable source evidence.
 
 AppLens is a strict-analysis workflow. `aapt`/`aapt2` and `jadx` are required before any evidence, model, prototype, or PRD is generated. Supplemental Manifest parsing and resource signals may enrich a completed toolchain result but never substitute for either required tool.
 
@@ -46,23 +55,21 @@ AppLens is a strict-analysis workflow. `aapt`/`aapt2` and `jadx` are required be
 
 ### 1. One-time preflight and run brief
 
-Extract already explicit facts from the user's first request; do not ask again for an authorization or emulator choice the user has already stated. Establish the following once per output directory:
+Extract already explicit facts from the user's first request; do not ask again for an authorization the user has already stated. Unless the user explicitly requests otherwise, select `static_only` exploration and `evidence` delivery. These are the default first-pass workflow, so do not ask the user to choose either one or require them to repeat them in a confirmation template. Establish the following once per output directory:
 
 - path to the user-provided `.apk` file;
 - project-local output directory;
 - explicit authorization to inspect the APK;
 - permission to download required local tools into that output when they are missing;
-- exploration plan: `static_only` or `dynamic`;
-- requested delivery: `evidence`, `model`, or `draft_prototype`.
+- explicit alternate exploration or delivery only when the user requests one.
 
-If any required fact is missing, ask one compact, combined question rather than staging several approval questions. Use this reply format:
+If the APK path, project-local output directory, explicit authorization, or required-tool download permission is missing, ask one compact, combined question rather than staging several approval questions. State the selected defaults in the question, but do not ask for them. Use this reply format:
 
 ```text
-APK: <path>; output: <project-local directory>; authorized: yes;
-tool-downloads: yes | no; exploration: static_only | dynamic; delivery: evidence | model | draft_prototype
+APK: <path>; output: <project-local directory>; authorized: yes; tool-downloads: yes | no
 ```
 
-Treat `dynamic` as permission to use only a resettable isolated emulator. Never infer it from the presence of `adb` or an emulator. `draft_prototype` authorizes an original, review-ready draft—not a final PRD.
+Report the default as `exploration: static_only; delivery: evidence`. Treat an explicitly requested `dynamic` plan as permission to use only a resettable isolated emulator. Never infer it from the presence of `adb` or an emulator. An explicitly requested `draft_prototype` authorizes an original, review-ready draft—not a final PRD.
 
 From the plugin root, run the preflight command exactly as follows:
 
@@ -77,17 +84,17 @@ scripts/provision_analysis_tools.py --output <output-dir> --approve-download
 scripts/require_analysis_tools.py --output <output-dir>
 ```
 
-The provisioner downloads only the latest official AAPT2, JADX, and—if no Java runtime is available—Eclipse Temurin JRE, verifies publisher-provided checksums, and writes its tool receipt to `evidence/toolchain.json`. It never installs system-wide software and it never creates a reduced-evidence artifact. If download authorization was not given, ask for it; do not downgrade.
+The provisioner prefers the latest stable official AAPT2 release, plus the latest official JADX and—if no Java runtime is available—Eclipse Temurin JRE. It verifies publisher-provided checksums and writes its tool receipt to `evidence/toolchain.json`. It never installs system-wide software and it never creates a reduced-evidence artifact. If download authorization was not given, ask for it; do not downgrade.
 
 Accept only a user-provided `.apk` file as input. Do not connect to a real device or retrieve installed application packages through ADB.
 
 After the user's one-time confirmation, record it before collecting evidence. Pass `--confirm-isolated-emulator` only for an explicitly selected dynamic plan:
 
 ```text
-scripts/configure_run.py --apk <apk-path> --output <output-dir> --workspace <workspace-dir> --confirm-user-authorized-apk --confirm-tool-downloads --exploration static_only --delivery <evidence|model|draft_prototype>
+scripts/configure_run.py --apk <apk-path> --output <output-dir> --workspace <workspace-dir> --confirm-user-authorized-apk --confirm-tool-downloads --exploration static_only --delivery evidence
 ```
 
-Omit `--confirm-tool-downloads` if the user declined tool downloads; then report missing tools as a blocker rather than downgrade. For an authorized dynamic plan, use `--exploration dynamic --confirm-isolated-emulator`. `evidence/run-brief.json` is the auditable record of the selected plan. Do not turn its flags into a substitute for a user statement.
+Omit `--confirm-tool-downloads` if the user declined tool downloads; then report missing tools as a blocker rather than downgrade. For an explicitly authorized dynamic plan, replace the defaults with `--exploration dynamic --confirm-isolated-emulator`; for an explicitly requested model or prototype, replace `--delivery evidence` with the requested delivery. `evidence/run-brief.json` is the auditable record of the selected plan. Do not turn its flags into a substitute for a user statement.
 
 ### 2. Static inventory
 
@@ -95,12 +102,16 @@ Run these commands in order:
 
 ```text
 scripts/static_inventory.py <apk-path> --output <output-dir>
-scripts/reverse_static_inventory.py <apk-path> --output <output-dir>
+scripts/reverse_static_inventory.py <apk-path> --output <output-dir> --timeout-seconds 3600 --threads 4
 scripts/bootstrap_project.py --evidence <output-dir>/evidence/static-inventory.json --output <output-dir>
 scripts/derive_candidates.py --output <output-dir>
 ```
 
 Use the inventories only as evidence: package metadata, declared permissions, component counts, resource inventory, native ABI hints, Android-tool output, and restricted reverse-static UI structure. Do not infer a user-facing feature solely from an ambiguous technical artifact. The reverse-static layer must contribute only its generic UI component counts and product signals; never read or include raw decompiled source.
+
+The reverse-static command allows JADX up to 60 minutes by default and reports safe progress to `evidence/reverse-progress.json` every few seconds. When the user explicitly requests a longer or shorter local analysis window, pass `--timeout-seconds <positive-seconds>`; pass `--threads <positive-integer>` only when the user's machine budget permits it. A running pass can be safely cancelled with `scripts/cancel_reverse_analysis.py --output <output-dir>`. JADX has no verified resume mode, so cancellation or timeout produces failed evidence and the next pass starts again. Do not generate a model from incomplete UI evidence.
+
+Working data remains in `.applens/work/` for 24 hours by default. Do not delete it automatically. Use `scripts/cleanup_working_data.py --output <output-dir>` to list expired data and add `--confirm-delete` only after the user explicitly approves deletion.
 
 If either static command fails, stop. Do not bootstrap a model, open the workbench, generate a prototype, or claim a completed analysis. A completed toolchain result can still contain `unconfirmed` behaviors, but no tool-missing fallback is allowed.
 

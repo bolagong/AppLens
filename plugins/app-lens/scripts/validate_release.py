@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -12,11 +13,21 @@ from pathlib import Path
 
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 REQUIRED_SCRIPTS = {
-    "preflight.sh", "analysis_toolchain.py", "require_analysis_tools.py", "provision_analysis_tools.py", "configure_run.py", "evidence_signals.py", "static_inventory.py", "reverse_static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
+    "preflight.sh", "analysis_toolchain.py", "require_analysis_tools.py", "provision_analysis_tools.py", "configure_run.py", "evidence_signals.py", "evidence_summary.py", "generate_evidence_summary.py", "cleanup_working_data.py", "cancel_reverse_analysis.py", "static_inventory.py", "reverse_static_inventory.py", "bootstrap_project.py", "derive_candidates.py",
     "install_to_emulator.py", "safe_explore.py", "ingest_dynamic_evidence.py", "serve_workbench.py",
     "approve_model.py", "generate_flutter.py", "verify_flutter.py", "generate_prd.py", "validate_model.py",
 }
 FORBIDDEN_SCRIPTS = {"adb_acquire.py"}
+EXECUTABLE_SCRIPTS = {
+    "provision_analysis_tools.py",
+    "require_analysis_tools.py",
+    "configure_run.py",
+    "static_inventory.py",
+    "reverse_static_inventory.py",
+    "generate_evidence_summary.py",
+    "cleanup_working_data.py",
+    "cancel_reverse_analysis.py",
+}
 
 
 def main() -> int:
@@ -55,6 +66,9 @@ def main() -> int:
     missing_scripts = sorted(name for name in REQUIRED_SCRIPTS if not (root / "scripts" / name).is_file())
     if missing_scripts:
         errors.append(f"missing scripts: {', '.join(missing_scripts)}")
+    non_executable = sorted(name for name in EXECUTABLE_SCRIPTS if not os.access(root / "scripts" / name, os.X_OK))
+    if non_executable:
+        errors.append(f"scripts must be executable: {', '.join(non_executable)}")
     forbidden_scripts = sorted(name for name in FORBIDDEN_SCRIPTS if (root / "scripts" / name).exists())
     if forbidden_scripts:
         errors.append(f"unsupported device-acquisition scripts present: {', '.join(forbidden_scripts)}")
@@ -68,7 +82,7 @@ def main() -> int:
     for required in (root / "README.md", root / "workbench" / "index.html", root / "RELEASE.md"):
         if not required.is_file():
             errors.append(f"missing release file: {required.relative_to(root)}")
-    for test_name in ("test_static_fallback.py", "test_analysis_toolchain.py"):
+    for test_name in ("test_static_fallback.py", "test_analysis_toolchain.py", "test_configure_run.py", "test_reverse_static_inventory.py", "test_evidence_delivery.py"):
         if not (root / "tests" / test_name).is_file():
             errors.append(f"missing regression test: {test_name}")
     repository_root = root.parents[1]

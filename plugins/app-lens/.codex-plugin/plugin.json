@@ -1,6 +1,6 @@
 {
   "name": "app-lens",
-  "version": "0.1.0+codex.20260805101555",
+  "version": "0.1.0+codex.20260805111924",
   "description": "Analyze a permitted Android APK into evidence, an editable product model, a Flutter reference prototype, and a Markdown PRD.",
   "author": {
     "name": "AppLens Contributors"
@@ -19,8 +19,8 @@
       "Prototype generation"
     ],
     "defaultPrompt": [
-      "I am authorized to inspect this APK and approve downloading the required official AppLens analysis tools into this project output if they are missing. Require aapt/aapt2 and jadx before analysis. Use a resettable isolated emulator for non-login, non-destructive exploration, then create an editable model and an original draft Flutter prototype. Do not generate reduced-evidence output.",
-      "I am authorized to inspect this APK and approve downloading the required official AppLens analysis tools into this project output if they are missing. Require aapt/aapt2 and jadx, then run a complete static analysis only. Do not generate a reduced-evidence model.",
+      "I am authorized to inspect this APK and approve downloading the required official AppLens analysis tools into this project output if they are missing. Require aapt/aapt2 and jadx, then run the default complete static-only analysis and deliver an evidence bundle. Do not ask me to choose an exploration plan or delivery type unless I explicitly request an alternative. Do not generate reduced-evidence output.",
+      "I am authorized to inspect this APK and approve downloading the required official AppLens analysis tools into this project output if they are missing. Require aapt/aapt2 and jadx, then run a complete static analysis only and deliver the evidence bundle. Do not generate a reduced-evidence model.",
       "I confirm this product-model version. Generate the Markdown PRD."
     ]
   }
