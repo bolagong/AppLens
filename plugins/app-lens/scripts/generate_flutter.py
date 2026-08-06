@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from model_tools import append_audit, load_model, write_json
+from model_tools import append_audit, display_feature_name, load_model, write_json
 
 
 def strings(value: Any) -> list[str]:
@@ -34,9 +34,8 @@ def prototype_payload(model: dict[str, Any]) -> dict[str, Any]:
             continue
         functions.append(
             {
-                "name": str(item.get("name", "Untitled function")),
+                "name": display_feature_name(item.get("name", "未命名功能")),
                 "entry": str(item.get("entry", "")),
-                "decision": str(item.get("product_decision", "modify")),
                 "flow": strings(item.get("flow")),
                 "pages": strings(item.get("pages")),
                 "states": strings(item.get("page_states")),
@@ -65,7 +64,6 @@ class ProductFunction {
   final Map<String, dynamic> data;
   String get name => data['name'] as String;
   String get entry => data['entry'] as String;
-  String get decision => data['decision'] as String;
   List<String> values(String key) => (data[key] as List<dynamic>).map((item) => item.toString()).toList();
 }
 
@@ -96,11 +94,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String query = '';
-  String filter = 'all';
   @override
   Widget build(BuildContext context) {
-    final visible = productFunctions.where((item) =>
-        item.name.toLowerCase().contains(query.toLowerCase()) && (filter == 'all' || item.decision == filter)).toList();
+    final visible = productFunctions.where((item) => item.name.toLowerCase().contains(query.toLowerCase())).toList();
     return Scaffold(
       appBar: AppBar(
         title: Text(_model['title'] as String),
@@ -108,7 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(children: [
         Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 6), child: TextField(onChanged: (value) => setState(() => query = value), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search reference functions', border: OutlineInputBorder()))),
-        SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Row(children: ['all', 'keep', 'modify', 'add'].map((value) => Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(label: Text(value == 'all' ? 'All' : value), selected: filter == value, onSelected: (_) => setState(() => filter = value)))).toList())),
         Expanded(child: visible.isEmpty
             ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.inbox_outlined, size: 44), SizedBox(height: 12), Text('No reference functions match this view.')]))
             : ListView.separated(padding: const EdgeInsets.all(16), itemCount: visible.length, separatorBuilder: (_, __) => const SizedBox(height: 10), itemBuilder: (context, index) {
@@ -149,7 +144,7 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.item.name), actions: [IconButton(icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border), onPressed: () => setState(() { saved = !saved; widget.onSaved(widget.item.name, saved); }))]),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      Text(widget.item.decision.toUpperCase(), style: Theme.of(context).textTheme.labelLarge?.copyWith(color: _primary)),
+      Text('ORIGINAL ABSTRACT FEATURE', style: Theme.of(context).textTheme.labelLarge?.copyWith(color: _primary)),
       const SizedBox(height: 8), Text(widget.item.entry.isEmpty ? 'Entry to be defined in the product model.' : widget.item.entry, style: Theme.of(context).textTheme.titleMedium), const SizedBox(height: 20),
       _Section('Flow', widget.item.values('flow')), _Section('Pages', widget.item.values('pages')), _Section('Interaction rules', widget.item.values('rules')), _Section('Acceptance criteria', widget.item.values('acceptance')),
       SwitchListTile(value: loading, title: const Text('Demonstrate loading state'), onChanged: (value) => setState(() { loading = value; if (value) failure = false; })),

@@ -44,6 +44,44 @@ def resource_signals(archive: Any) -> list[str]:
     return signals
 
 
+def dex_count(archive: dict[str, Any]) -> int | None:
+    value = archive.get("dex_file_count")
+    if isinstance(value, int) and value >= 0:
+        return value
+    # Read older evidence without preserving or emitting its raw filenames.
+    legacy = archive.get("dex_files")
+    if isinstance(legacy, list):
+        return len(legacy)
+    return None
+
+
+def manifest_permission_count(manifest: dict[str, Any]) -> int | None:
+    if manifest.get("status") != "parsed":
+        return None
+    permissions = manifest.get("permissions")
+    return len(permissions) if isinstance(permissions, list) else None
+
+
+def android_permission_count(android: dict[str, Any]) -> int | None:
+    summary = android.get("permission_summary")
+    if not isinstance(summary, dict):
+        return None
+    value = summary.get("declared_permission_count")
+    return value if isinstance(value, int) and value >= 0 else None
+
+
+def progress_line(progress: dict[str, Any] | None) -> str:
+    prefix = "- 运行进度：`evidence/reverse-progress.json`"
+    status = progress.get("status") if isinstance(progress, dict) else None
+    if status == "running":
+        return prefix + "；当前运行中，可使用 `scripts/cancel_reverse_analysis.py --output <输出目录>` 请求安全取消。"
+    if status == "completed":
+        return prefix + "；当前状态：已完成。"
+    if status in {"failed", "cancelled"}:
+        return prefix + f"；当前状态：{status}。"
+    return prefix + "；当前状态未取得。"
+
+
 def reverse_summary(reverse: dict[str, Any] | None, legacy_working_data: bool = False) -> tuple[str, list[str]]:
     if reverse is None:
         if legacy_working_data:
@@ -74,6 +112,7 @@ def render_evidence_summary(output_dir: Path) -> str:
     toolchain = read_object(evidence_dir / "toolchain.json")
     static = read_object(evidence_dir / "static-inventory.json")
     reverse = read_object(evidence_dir / "reverse-static.json")
+    progress = read_object(evidence_dir / "reverse-progress.json")
     reverse_status, reverse_lines = reverse_summary(
         reverse,
         legacy_working_data=(output_dir / "evidence" / "reverse-decompiled").exists(),
@@ -112,11 +151,11 @@ def render_evidence_summary(output_dir: Path) -> str:
         manifest = static.get("manifest_metadata", {})
         android = static.get("android_tool_evidence", {})
         if isinstance(archive, dict):
-            dex_files = archive.get("dex_files", [])
+            dex_files = dex_count(archive)
             lines.extend(
                 [
                     f"- 归档文件数：{archive.get('archive_file_count', '未取得')}",
-                    f"- DEX 文件数：{len(dex_files) if isinstance(dex_files, list) else '未取得'}",
+                    f"- DEX 文件数：{dex_files if dex_files is not None else '未取得'}",
                     f"- 原生 ABI 数：{len(archive.get('native_abis', [])) if isinstance(archive.get('native_abis'), list) else '未取得'}",
                     f"- 原生库数：{archive.get('native_library_count', '未取得')}",
                 ]
@@ -124,17 +163,20 @@ def render_evidence_summary(output_dir: Path) -> str:
             signals = resource_signals(archive)
             lines.append("- 聚合资源信号：" + ("；".join(signals) if signals else "未发现"))
         if isinstance(manifest, dict):
-            permissions = manifest.get("permissions", [])
+            manifest_count = manifest_permission_count(manifest)
             lines.extend(
                 [
                     f"- Manifest 解析状态：{manifest.get('status', '未取得')}",
-                    f"- Manifest 声明权限数：{len(permissions) if isinstance(permissions, list) else '未取得'}",
+                    f"- Manifest 声明权限数：{manifest_count if manifest_count is not None else '未取得'}",
                     f"- Manifest 组件计数：{component_text(manifest.get('component_counts'))}",
                 ]
             )
         if isinstance(android, dict):
             permission_summary = android.get("permission_summary", {})
             if isinstance(permission_summary, dict):
+                aapt_count = android_permission_count(android)
+                if aapt_count is not None:
+                    lines.append(f"- AAPT2 聚合声明权限数：{aapt_count}")
                 signals = permission_summary.get("generic_signals", [])
                 lines.append("- Android 工具通用权限信号：" + ("；".join(signals) if isinstance(signals, list) and signals else "未发现"))
 
@@ -147,7 +189,7 @@ def render_evidence_summary(output_dir: Path) -> str:
             "- 机器证据：`evidence/` 中的 JSON 文件",
             "- 工具缓存：`.applens/toolchain/`（不属于交付结果）",
             "- 临时工作数据：`.applens/work/`（不属于交付结果，默认保留 24 小时）",
-            "- 运行进度：`evidence/reverse-progress.json`；运行中可使用 `scripts/cancel_reverse_analysis.py --output <输出目录>` 请求安全取消。",
+            progress_line(progress),
             "- 清理候选：运行 `scripts/cleanup_working_data.py --output <输出目录>` 查看；仅在加上 `--confirm-delete` 后删除超过 24 小时的临时数据。",
         ]
     )

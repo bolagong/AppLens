@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from model_tools import approval_fingerprint, append_audit, load_model, model_path, utc_now, validation_errors, write_json
+from model_tools import adopt_all_abstract_features, approval_fingerprint, append_audit, load_model, model_path, utc_now, validation_errors, write_json
 
 
 MAX_BODY_BYTES = 5 * 1024 * 1024
@@ -102,6 +102,7 @@ class Handler(BaseHTTPRequestHandler):
             model = payload.get("model")
             if not isinstance(model, dict):
                 raise ValueError("model must be an object.")
+            adopt_all_abstract_features(model)
             errors = validation_errors(model)
             if errors:
                 self.send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"errors": errors})
@@ -123,7 +124,22 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
 
     def do_POST(self) -> None:  # noqa: N802
-        if urlparse(self.path).path != "/api/confirm":
+        request_path = urlparse(self.path).path
+        if request_path == "/api/adopt-all":
+            try:
+                model = load_model(self.server.output_dir)
+                errors = validation_errors(model)
+                if errors:
+                    self.send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"errors": errors})
+                    return
+                adopted_count, _changed = adopt_all_abstract_features(model)
+                append_audit(model, "bulk_adoption_requested", {"count": adopted_count, "mode": "original_abstract_features"})
+                write_json(model_path(self.server.output_dir), model)
+                self.send_json(HTTPStatus.OK, {"model": model, "adopted_count": adopted_count})
+            except (ValueError, json.JSONDecodeError, OSError) as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if request_path != "/api/confirm":
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         try:
@@ -132,6 +148,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(version, str) or not version.strip():
                 raise ValueError("A final version is required.")
             model = load_model(self.server.output_dir)
+            adopt_all_abstract_features(model)
             errors = validation_errors(model)
             if errors:
                 self.send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"errors": errors})

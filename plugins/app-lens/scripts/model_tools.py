@@ -14,6 +14,20 @@ from typing import Any
 
 CONFIDENCE_LEVELS = {"dynamically_verified", "static_inference", "unconfirmed"}
 PRODUCT_DECISIONS = {"keep", "modify", "delete", "add"}
+ABSTRACT_ADOPTION_NOTE = "采用全部抽象功能；使用原创品牌、图标、文案、图片、Mock 数据和本地逻辑，不复制竞品资产或专有实现。"
+FEATURE_DISPLAY_NAMES = {
+    "Camera capture": "相机采集",
+    "External sharing": "外部分享",
+    "Filter or sort": "筛选或排序",
+    "Location-aware experience": "位置相关体验",
+    "Map browsing": "地图浏览",
+    "Notification preferences": "通知偏好",
+    "Save or bookmark": "保存或收藏",
+    "Save or favorite": "收藏或喜欢",
+    "Profile area": "个人资料",
+    "Search": "搜索",
+    "Settings": "设置",
+}
 FUNCTION_FIELDS = (
     "name",
     "entry",
@@ -112,6 +126,53 @@ def append_audit(model: dict[str, Any], event: str, details: dict[str, Any]) -> 
     if not isinstance(audit, list):
         raise ValueError("Model audit must be a list.")
     audit.append({"at": utc_now(), "event": event, "details": details})
+
+
+def adopt_all_abstract_features(model: dict[str, Any]) -> tuple[int, bool]:
+    """Adopt every evidence-derived feature for an original implementation."""
+    functions = model.get("functions")
+    if not isinstance(functions, list):
+        raise ValueError("model.functions must be a list.")
+
+    changed = False
+    adopted_count = 0
+    for function in functions:
+        if not isinstance(function, dict):
+            raise ValueError("Every model function must be an object.")
+        adopted_count += 1
+        if function.get("product_decision") != "keep" or function.get("modification_notes") != ABSTRACT_ADOPTION_NOTE:
+            changed = True
+        function["product_decision"] = "keep"
+        function["modification_notes"] = ABSTRACT_ADOPTION_NOTE
+
+    if changed:
+        generation = model.setdefault("generation", {})
+        if not isinstance(generation, dict):
+            raise ValueError("model.generation must be an object.")
+        generation["approved_model_version"] = None
+        generation["approved_at"] = None
+        generation["approved_model_fingerprint"] = None
+        generation["prd_status"] = "blocked_pending_confirmation"
+        project = model.setdefault("project", {})
+        if not isinstance(project, dict):
+            raise ValueError("model.project must be an object.")
+        project["status"] = "model_review"
+        append_audit(
+            model,
+            "all_abstract_features_adopted",
+            {
+                "count": adopted_count,
+                "mode": "original_abstract_features",
+                "excluded": ["competitor brands", "proprietary assets", "backend logic", "authentication and payment"],
+            },
+        )
+    return adopted_count, changed
+
+
+def display_feature_name(name: Any) -> str:
+    """Return the localized user-facing name while preserving raw evidence names."""
+    value = str(name)
+    return FEATURE_DISPLAY_NAMES.get(value, value)
 
 
 def approval_fingerprint(model: dict[str, Any]) -> str:

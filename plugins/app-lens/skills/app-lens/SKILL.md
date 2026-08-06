@@ -154,7 +154,7 @@ modification_notes
 acceptance_criteria
 ```
 
-Present the function tree and let the product owner modify it. Product decisions, not raw evidence, control generation. Preserve the original observations read-only inside `observations`.
+The workbench presents the function tree read-only and provides a safe bulk-adoption action that marks all evidence-derived functions for an original implementation. It must never be used to clone competitor brands, assets, copy, backend logic, or proprietary behavior. Product decisions, not raw evidence, control generation; the final model confirmation remains required. Preserve the original observations read-only inside `observations`.
 
 Start the local three-column editor with `scripts/serve_workbench.py --output <output-dir>`. It is bound to `127.0.0.1`, serves one project only, and writes back through schema validation. A product owner may also edit the JSON directly, then must run `scripts/validate_model.py <output-dir>/project-model.json`.
 

@@ -59,7 +59,7 @@ def inventory_zip(apk_path: Path) -> dict[str, Any]:
         suffixes = Counter(Path(name).suffix.lower() or "[none]" for name in file_names)
         resource_prefixes = Counter(name.split("/", 1)[0] for name in file_names)
         native_libraries = sorted(name for name in file_names if name.startswith("lib/"))
-        dex_files = sorted(name for name in file_names if name.endswith(".dex"))
+        dex_file_count = sum(name.endswith(".dex") for name in file_names)
 
     architectures = sorted(
         {
@@ -70,9 +70,11 @@ def inventory_zip(apk_path: Path) -> dict[str, Any]:
     )
     return {
         "archive_file_count": len(file_names),
-        "top_level_paths": dict(sorted(resource_prefixes.items())),
+        # Keep only aggregate counts. Raw archive/resource names are not safe
+        # delivery evidence and are unnecessary for product-level signals.
+        "top_level_group_count": len(resource_prefixes),
         "file_extensions": dict(sorted(suffixes.items())),
-        "dex_files": dex_files,
+        "dex_file_count": dex_file_count,
         "native_abis": architectures,
         "native_library_count": len(native_libraries),
         # Candidates must not be based on the arbitrary first 200 ZIP entries.

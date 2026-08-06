@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-from model_tools import approval_fingerprint, append_audit, load_model, utc_now, validation_errors, write_json
+from model_tools import adopt_all_abstract_features, approval_fingerprint, append_audit, load_model, utc_now, validation_errors, write_json
 
 
 VERSION_PATTERN = re.compile(r"^v?\d+(?:\.\d+){0,2}(?:[-+][A-Za-z0-9.-]+)?$")
@@ -25,6 +25,7 @@ def main() -> int:
     output_dir = arguments.output.expanduser().resolve()
     try:
         model = load_model(output_dir)
+        adopt_all_abstract_features(model)
         errors = validation_errors(model)
         if errors:
             raise ValueError("; ".join(errors))

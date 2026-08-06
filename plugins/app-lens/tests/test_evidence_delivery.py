@@ -29,7 +29,7 @@ class EvidenceDeliveryTests(unittest.TestCase):
                 {
                     "archive": {
                         "archive_file_count": 12,
-                        "dex_files": ["classes.dex"],
+                        "dex_file_count": 1,
                         "native_abis": ["arm64-v8a"],
                         "native_library_count": 2,
                         "resource_signal_summary": [{"name": "Search", "matching_resource_count": 1}],
@@ -37,7 +37,7 @@ class EvidenceDeliveryTests(unittest.TestCase):
                     },
                     "manifest_metadata": {"status": "limited", "permissions": []},
                     "android_tool_evidence": {
-                        "permission_summary": {"generic_signals": ["Camera capture"]},
+                        "permission_summary": {"declared_permission_count": 56, "generic_signals": ["Camera capture"]},
                         "results": {"badging": {"stdout": "proprietary.example"}},
                     },
                 },
@@ -52,8 +52,19 @@ class EvidenceDeliveryTests(unittest.TestCase):
         self.assertIn("部分完成", summary)
         self.assertIn("超过 3600 秒上限", summary)
         self.assertIn("Camera capture", summary)
+        self.assertIn("Manifest 声明权限数：未取得", summary)
+        self.assertIn("AAPT2 聚合声明权限数：56", summary)
         self.assertNotIn("proprietary", summary)
         self.assertNotIn("sample_resource_paths", summary)
+
+    def test_summary_only_shows_cancel_hint_for_running_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            write_json(output / "evidence" / "reverse-progress.json", {"status": "completed"})
+            summary = write_evidence_summary(output).read_text(encoding="utf-8")
+
+        self.assertIn("当前状态：已完成", summary)
+        self.assertNotIn("运行中，可使用", summary)
 
     def test_cleanup_requires_explicit_delete_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

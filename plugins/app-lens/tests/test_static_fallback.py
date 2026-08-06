@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 import sys
 import tempfile
@@ -111,10 +112,14 @@ class StaticFallbackTests(unittest.TestCase):
             with zipfile.ZipFile(apk, "w") as archive:
                 archive.writestr("assets/proprietary_brand_asset.png", b"fixture")
                 archive.writestr("res/layout/search_results.xml", b"fixture")
+                archive.writestr("classes.dex", b"fixture")
 
             archive_evidence = inventory_zip(apk)
 
         self.assertNotIn("sample_resource_paths", archive_evidence)
+        self.assertNotIn("top_level_paths", archive_evidence)
+        self.assertNotIn("proprietary_brand_asset", json.dumps(archive_evidence))
+        self.assertEqual(archive_evidence["dex_file_count"], 1)
         self.assertEqual(archive_evidence["resource_signal_summary"][0]["signal"], "search")
         with patch(
             "static_inventory.command_output",

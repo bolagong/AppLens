@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from model_tools import approval_fingerprint, append_audit, load_model, utc_now, validation_errors, write_json
+from model_tools import approval_fingerprint, append_audit, display_feature_name, load_model, utc_now, validation_errors, write_json
 
 
 def items(value: Any) -> list[str]:
@@ -35,9 +35,9 @@ def evidence_list(value: Any) -> str:
 
 
 def render_function(function: dict[str, Any]) -> str:
-    return f'''### {function.get("name", "未命名功能")}
+    return f'''### {display_feature_name(function.get("name", "未命名功能"))}
 
-- 产品决策：{function.get("product_decision", "modify")}
+- 采用方式：全部抽象功能均以原创实现采用
 - 置信度：{function.get("confidence", "unconfirmed")}
 - 入口：{function.get("entry") or "待产品确认"}
 - 修改说明：{function.get("modification_notes") or "无"}
@@ -68,7 +68,7 @@ def build_prd(model: dict[str, Any]) -> str:
     functions = [item for item in model.get("functions", []) if isinstance(item, dict) and item.get("product_decision") != "delete"]
     visual = model.get("visual_model", {})
     notes = bullet_list(visual.get("reference_notes"), "使用原创品牌、图标、文案与 Mock 数据")
-    architecture = "\n".join(f"- {item.get('name', '未命名功能')}" for item in functions) or "- 当前版本未选择功能"
+    architecture = "\n".join(f"- {display_feature_name(item.get('name', '未命名功能'))}" for item in functions) or "- 当前版本未选择功能"
     function_sections = "\n\n".join(render_function(item) for item in functions) or "本期未选择功能。"
     return f'''# {project["name"]} PRD
 
@@ -83,7 +83,7 @@ def build_prd(model: dict[str, Any]) -> str:
 
 ## 2. 本期范围与非目标
 
-本期范围为以下经产品方案层保留、修改或新增的功能与页面。
+本期范围为本地证据抽象出的全部功能与页面，并以原创品牌、图标、文案、图片、Mock 数据和本地逻辑实现。
 
 非目标：登录、注册、会员、订阅、支付、真实后端、竞品 API、真实账户，以及任何外部副作用。
 
@@ -113,7 +113,7 @@ def build_prd(model: dict[str, Any]) -> str:
 
 1. Flutter 原型可打开已确认页面，核心本地流程可走通。
 2. 组件与视觉决策一致，且全部为原创品牌、图标、文案、图片和 Mock 数据。
-3. 被删除功能、鉴权、会员和支付逻辑未被生成。
+3. 鉴权、会员和支付逻辑未被生成。
 4. 每项功能的验收标准在产品方案层中可追溯；`unconfirmed` 项不得被表述为已验证事实。
 '''
 

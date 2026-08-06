@@ -61,7 +61,7 @@ def main() -> int:
     model = {
         "schema_version": "1.0",
         "project": {
-            "name": "Untitled product reference",
+            "name": "原创产品参考",
             "version": "v0.1",
             "created_at": utc_now(),
             "status": "evidence_review",

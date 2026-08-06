@@ -7,7 +7,7 @@
 1. Requires Android Build-Tools (`aapt` or `aapt2`) and `jadx`, then inventories a user-provided APK with package metadata and restricted UI structure evidence—without discovering API endpoints, tokens, credentials, or backend implementation.
 2. Guides safe static and emulator-based evidence collection.
 3. Stores findings in `project-model.json`, separate from generated HTML, Flutter, and PRD artifacts.
-4. Helps the product owner keep, modify, delete, or add proposed capabilities.
+4. Lets the product owner adopt all evidence-derived capabilities in one safe bulk action, using original implementation constraints.
 5. Generates an original Flutter reference prototype, then a Markdown PRD after confirmation.
 
 ## Local prerequisites
@@ -23,7 +23,7 @@ Vetted release tooling may be supplied through `APPLENS_AAPT` and `APPLENS_JADX`
 Install the plugin from its Marketplace, open a new Codex thread in an empty output workspace, and ask Codex to analyze an APK you are authorized to inspect. AppLens defaults to a static-only analysis and an evidence bundle; it does not ask the user to choose those defaults. It records the authorization, required-toolchain policy, and selected defaults once in `evidence/run-brief.json`, and always maintains a human-readable `docs/EVIDENCE_SUMMARY.md`.
 
 ```text
-one-time run brief → evidence → editable model → optional draft prototype → final confirmation → PRD
+one-time run brief → evidence → bulk adoption of abstract features → final confirmation → optional prototype/PRD
 ```
 
 For the default first pass, users can send one message:
@@ -71,7 +71,7 @@ For dynamic evidence, first install the user-provided APK only onto a resettable
 - `scripts/derive_candidates.py` — creates review-only function candidates from safe evidence.
 - `scripts/install_to_emulator.py` / `safe_explore.py` — installation and conservative exploration on an isolated emulator only.
 - `scripts/ingest_dynamic_evidence.py` — attaches screenshot and path evidence to the model.
-- `scripts/serve_workbench.py` — starts the local product-decision editor at `127.0.0.1`.
+- `scripts/serve_workbench.py` — starts the local workbench at `127.0.0.1`; its bulk-adoption action accepts all abstract evidence-derived features while keeping evidence read-only and implementation original.
 - `scripts/generate_flutter.py` / `verify_flutter.py` — generate and validate the original Flutter reference prototype.
 - `scripts/approve_model.py` / `generate_prd.py` — record confirmation and produce Markdown PRD plus changelog.
 - `scripts/validate_release.py` — runs dependency-free structural checks before publishing.
